@@ -1,0 +1,41 @@
+TODO: Update this file
+# Design_Drafter
+
+## primary workflows
+
+### Train model
+
+
+### Optimize hyperparameters
+
+
+### Predict a new observation
+
+
+# Use model as a package
+
+## Virtual environment (optional)
+```
+python3 -m venv venv
+source venv/bin/activate
+```
+
+## Installation
+From the src/ directory...
+
+```
+python3 -m pip install pip setuptools wheel
+python3 -m pip install -e .
+```
+
+If you are developing this package, 
+```
+python3 -m pip install pip setuptools wheel
+python3 -m pip install -e ".[dev]"
+```
+
+## Primary workflows
+
+
+
+Godwin, R. C.* , Melvin, R. L.*, “Toward Efficient Data Science: A Comprehensive MLOps Template for Collaborative Code Development and Automation”, SoftwareX, 26, 101723, 2024
