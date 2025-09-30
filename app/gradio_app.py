@@ -93,7 +93,6 @@ def generate_diagram(description: str, diagram_type: str, theme: Optional[str] =
 
     # --- Proper PlantUML encoding (deflate+base64+URL-safe) ---
     encoded = _plantuml_encode(plantuml_code)
-    print('ENCODED - ', encoded)
     image_url = Design_DrafterConfig.PLANTUML_SERVER_URL_TEMPLATE.format(encoded=encoded)
 
     # Fetch image from PlantUML server
@@ -145,7 +144,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         if img_bytes is None:
             # Create a simple error image (red X or text)
             from PIL import ImageDraw, ImageFont
-            error_img = Image.new("RGB", (400, 200), color="white")
+            error_img = Image.new("RGB", (600, 300), color="white")
             draw = ImageDraw.Draw(error_img)
             # Try to use a default font, fallback if not available
             try:

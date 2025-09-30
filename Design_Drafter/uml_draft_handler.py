@@ -9,7 +9,7 @@ No UI/Gradio code.
 """
 
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 
 from llm_utils.aiweb_common.WorkflowHandler import WorkflowHandler
 from Design_Drafter.config.config import Design_DrafterConfig
@@ -170,40 +170,26 @@ class UMLDraftHandler(WorkflowHandler):
             # If no llm_interface provided, raise error (could be injected for testability)
             if llm_interface is None:
                 raise ValueError("LLM interface must be provided for diagram generation.")
-            print("DEBUG: PlantUML prompt variables:", {
-                "diagram_type": diagram_type,
-                "description": description,
-                "theme": theme,
-            })
-            print("DEBUG: PlantUML prompt object:", prompt)
             # Extract messages if present (Langchain ChatPromptValue)
             if hasattr(prompt, "to_messages"):
                 messages = prompt.to_messages()
-                print("DEBUG: Using prompt.to_messages() for LLM input.")
                 # Try passing just the content string of the first message
                 if messages and hasattr(messages[0], "content"):
                     prompt_input = messages[0].content
-                    print("DEBUG: Using first message content for LLM input:", repr(prompt_input))
                 else:
                     prompt_input = messages
-                    print("DEBUG: Fallback: using messages list for LLM input.")
             elif hasattr(prompt, "messages"):
                 messages = prompt.messages
-                print("DEBUG: Using prompt.messages for LLM input.")
                 if messages and hasattr(messages[0], "content"):
                     prompt_input = messages[0].content
-                    print("DEBUG: Using first message content for LLM input:", repr(prompt_input))
                 else:
                     prompt_input = messages
-                    print("DEBUG: Fallback: using messages list for LLM input.")
             elif isinstance(prompt, str):
                 prompt_input = prompt
-                print("DEBUG: Using prompt as string for LLM input.")
             else:
                 raise TypeError("Prompt is not a recognized type for LLM input.")
             response = llm_interface.invoke(prompt_input)
             diagram_code = self.check_content_type(response)
-            print("DEBUG: Generated PlantUML code:\n", diagram_code)
             # Example: If you construct an image URL here, log it as well
             # image_url = f"http://plantuml-server/plantuml/png/{urllib.parse.quote(diagram_code)}"
             # print("DEBUG: PlantUML image URL:", image_url)
