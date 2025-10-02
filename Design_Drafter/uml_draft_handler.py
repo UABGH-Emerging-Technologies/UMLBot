@@ -136,10 +136,15 @@ class UMLDraftHandler(WorkflowHandler):
         # Skipping prompt template validation for now:
         # if hasattr(self, "_validate_prompt_template"):
         #     self._validate_prompt_template(prompt_template.template)
+        def _escape_curly_braces(val):
+            if val is None:
+                return val
+            return val.replace("{", "{{").replace("}", "}}")
+
         variables = {
-            "diagram_type": diagram_type,
-            "description": description,
-            "theme": theme,
+            "diagram_type": _escape_curly_braces(diagram_type),
+            "description": _escape_curly_braces(description),
+            "theme": _escape_curly_braces(theme),
         }
         return prompt_template.format_prompt(**variables)
 

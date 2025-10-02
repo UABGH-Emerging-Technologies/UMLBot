@@ -54,6 +54,8 @@ class Design_DrafterConfig:
         "Timing",
         "Sequence"
     ]
+    DEFAULT_DIAGRAM_TYPE = "Use Case"
+    DEFAULT_INPUT = "Test"
     SYSTEM_PROMPT_TEMPLATE = "Convert the following description into a PlantUML {diagram_type} diagram.\n{input}"
     FALLBACK_PLANTUML_TEMPLATE = "@startuml\n' {diagram_type} diagram\n' {description}\n@enduml"
     API_KEY_MISSING_MSG = (

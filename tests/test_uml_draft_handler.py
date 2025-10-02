@@ -52,3 +52,12 @@ def test_validate_prompt_template_malformed(monkeypatch):
     bad_template = "Generate a {123bad} diagram for: {description}"
     with pytest.raises(ValueError):
         handler._validate_prompt_template(bad_template)
+def test_construct_prompt_escapes_curly_braces(monkeypatch):
+    handler = UMLDraftHandler(config=Design_DrafterConfig())
+    monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
+    plantuml_block = "@startuml\nskinparam {\n  BackgroundColor #EEEBDC\n}\n@enduml"
+    prompt = handler.construct_prompt("class", plantuml_block, "bluegray")
+    # The curly braces in the PlantUML block should be escaped
+    assert "{{" in prompt and "}}" in prompt
+    # The PlantUML block should still be present in the output
+    assert "skinparam" in prompt
