@@ -5,6 +5,7 @@ Gradio-based UML Diagram Generator App
 - Uses LLM-based NLPParser (llm_utils/aiweb_common/generate)
 - Orchestrates DiagramBuilder, Validator, PlantUML rendering, and preview/download
 """
+import logging
 
 import gradio as gr
 from typing import Tuple, Optional, Any, Callable
@@ -21,7 +22,8 @@ from Design_Drafter.config.config import Design_DrafterConfig
 # Import UMLDraftHandler for diagram generation
 from Design_Drafter.uml_draft_handler import UMLDraftHandler
 from llm_utils.aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
-
+from llm_utils.aiweb_common.generate.ChatResponse import ChatResponseHandler
+from llm_utils.aiweb_common.generate.ChatSchemas import Message, Role, ChatRequest
 # Use config for diagram types
 
 import requests
@@ -158,10 +160,9 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     def on_chat_submit(user_input, chat_history, plantuml_code_text):
         """
         Handles submission of a UML change suggestion in the chat workflow.
-        Adds a single system message combining the current PlantUML and the user's change description.
-        Logs output structure for debugging.
+        Calls the LLM backend and updates the chat and diagram preview.
         """
-        import logging
+
         logging.basicConfig(level=logging.DEBUG)
         if not chat_history:
             chat_history = []
@@ -178,6 +179,34 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
             "Please return only the updated PlantUML code."
         )
         chat_history = chat_history + [("system", system_msg)]
+
+        # Convert chat_history to list of Message objects
+        messages = []
+        for role, content in chat_history:
+            if role == "user":
+                messages.append(Message(role=Role.human, content=content))
+            else:
+                messages.append(Message(role=Role.ai, content=content))
+
+        # Call the LLM backend
+        handler = UMLDraftHandler()
+        handler._init_openai(
+            openai_compatible_endpoint=Design_DrafterConfig.LLM_API_BASE,
+            openai_compatible_key=Design_DrafterConfig.LLM_API_KEY,
+            openai_compatible_model=Design_DrafterConfig.LLM_MODEL,
+            name="Design_Drafter"
+        )
+        # LOG the prompt value before passing to ChatResponseHandler
+        prompt_value = None
+        logging.debug(f"on_chat_submit: passing prompt={prompt_value} to ChatResponseHandler")
+        chat_response_handler = ChatResponseHandler(handler.llm_interface, prompt=prompt_value)
+        chat_request = ChatRequest(history=messages)
+        chat_response = chat_response_handler.generate_response(chat_request.history)
+
+        # Extract updated PlantUML code from response
+        updated_plantuml = chat_response.response.content
+        chat_history = chat_history + [("system", updated_plantuml)]
+
         logging.debug(f"on_chat_submit returning: chat_history={chat_history}, chat_input=''")
         return chat_history, ""
 
