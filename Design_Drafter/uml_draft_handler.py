@@ -11,6 +11,18 @@ No UI/Gradio code.
 from pathlib import Path
 from typing import Optional, Any
 
+def escape_curly_braces(val: Optional[str]) -> Optional[str]:
+    """
+    Escapes all curly braces in a string for safe prompt injection.
+    Args:
+        val (Optional[str]): Input string.
+    Returns:
+        Optional[str]: String with '{' replaced by '{{' and '}' replaced by '}}'.
+    """
+    if val is None:
+        return val
+    return val.replace("{", "{{").replace("}", "}}")
+
 from llm_utils.aiweb_common.WorkflowHandler import WorkflowHandler
 from Design_Drafter.config.config import Design_DrafterConfig
 
@@ -136,15 +148,10 @@ class UMLDraftHandler(WorkflowHandler):
         # Skipping prompt template validation for now:
         # if hasattr(self, "_validate_prompt_template"):
         #     self._validate_prompt_template(prompt_template.template)
-        def _escape_curly_braces(val):
-            if val is None:
-                return val
-            return val.replace("{", "{{").replace("}", "}}")
-
         variables = {
-            "diagram_type": _escape_curly_braces(diagram_type),
-            "description": _escape_curly_braces(description),
-            "theme": _escape_curly_braces(theme),
+            "diagram_type": escape_curly_braces(diagram_type),
+            "description": escape_curly_braces(description),
+            "theme": escape_curly_braces(theme),
         }
         return prompt_template.format_prompt(**variables)
 

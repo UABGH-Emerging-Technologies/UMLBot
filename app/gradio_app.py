@@ -164,83 +164,97 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         Handles submission of a UML change suggestion in the chat workflow.
         Calls the LLM backend and updates the chat and diagram preview.
         After each response, extracts PlantUML code and updates the code window and diagram preview.
+        Robust error handling: if any error occurs, previous code/diagram remain visible and user receives feedback.
         """
-
-        logging.basicConfig(level=logging.DEBUG)
-        if not chat_history:
-            chat_history = []
-        # Add user suggestion
-        chat_history = chat_history + [("user", user_input)]
-        # Compose single system message
-        system_msg = (
-            f"Here's the current PlantUML text:\n"
-            "```plantuml\n"
-            f"{plantuml_code_text.strip()}\n"
-            "```\n"
-            f"And here's the description of how I would like it changed:\n"
-            f"{user_input}\n"
-            "Please return only the updated PlantUML code."
-        )
-        chat_history = chat_history + [("system", system_msg)]
-
-        # Convert chat_history to list of dicts compatible with both ChatRequest and LangChain
-        messages = []
-        for role, content in chat_history:
-            # Pydantic ChatRequest expects 'human' and 'ai' for role
-            if role == "user":
-                messages.append({"role": "human", "content": content})
-            else:
-                messages.append({"role": "ai", "content": content})
-
-        # Call the LLM backend
-        handler = UMLDraftHandler()
-        handler._init_openai(
-            openai_compatible_endpoint=Design_DrafterConfig.LLM_API_BASE,
-            openai_compatible_key=Design_DrafterConfig.LLM_API_KEY,
-            openai_compatible_model=Design_DrafterConfig.LLM_MODEL,
-            name="Design_Drafter"
-        )
-        # LOG the prompt value before passing to ChatResponseHandler
-        
-        prompt_value = system_msg
-        logging.debug(f"on_chat_submit: passing prompt={prompt_value} to ChatResponseHandler")
-        chat_response_handler = ChatResponseHandler(handler.llm_interface, prompt=prompt_value)
-        # Only pass the list of dicts to LangChain, not to ChatRequest (which expects Message objects)
-        # So, skip ChatRequest and pass messages directly to the handler
-        logging.debug(f"Passing messages to chat_response_handler: {messages}")
-        chat_response = chat_response_handler.generate_response(messages)
-
-        # Extract updated PlantUML code from response
-        raw_response = chat_response.response.content
         try:
-            extracted_plantuml = extract_last_plantuml_block(raw_response)
-            plantuml_code_text = extracted_plantuml
-            # Trigger diagram re-render
-            pil_image, status_msg = on_rerender(plantuml_code_text)
-            error_feedback = ""
-        except Exception as e:
-            # Extraction failed, keep previous code, show error
-            pil_image, status_msg = None, f"Error extracting PlantUML: {e}"
-            error_feedback = f"⚠️ {status_msg}"
-            # Optionally, keep the raw response in chat for debugging
+            logging.basicConfig(level=logging.DEBUG)
+            if not chat_history:
+                chat_history = []
+            # Add user suggestion
+            chat_history = chat_history + [("user", user_input)]
+            # Compose single system message
+            system_msg = (
+                f"Here's the current PlantUML text:\n"
+                "```plantuml\n"
+                f"{plantuml_code_text.strip()}\n"
+                "```\n"
+                f"And here's the description of how I would like it changed:\n"
+                f"{user_input}\n"
+                "Please return only the updated PlantUML code."
+            )
+            chat_history = chat_history + [("system", system_msg)]
 
-        # Append the LLM's PlantUML response as an "assistant" message so it displays in the chatbox
-        chat_history = chat_history + [("assistant", raw_response)]
+            # Convert chat_history to list of dicts compatible with both ChatRequest and LangChain
+            messages = []
+            for role, content in chat_history:
+                # Pydantic ChatRequest expects 'human' and 'ai' for role
+                if role == "user":
+                    messages.append({"role": "human", "content": content})
+                else:
+                    messages.append({"role": "ai", "content": content})
 
-        logging.debug(f"on_chat_submit returning: chat_history={chat_history}, chat_input=''")
+            # Call the LLM backend
+            handler = UMLDraftHandler()
+            handler._init_openai(
+                openai_compatible_endpoint=Design_DrafterConfig.LLM_API_BASE,
+                openai_compatible_key=Design_DrafterConfig.LLM_API_KEY,
+                openai_compatible_model=Design_DrafterConfig.LLM_MODEL,
+                name="Design_Drafter"
+            )
+            # LOG the prompt value before passing to ChatResponseHandler
 
-        # For Gradio Chatbot, convert chat_history to OpenAI-style messages for display
-        gradio_chat_history = []
-        for role, content in chat_history:
-            if role == "user":
-                gradio_chat_history.append({"role": "user", "content": content})
-            else:
-                gradio_chat_history.append({"role": "assistant", "content": content})
+            prompt_value = system_msg
+            logging.debug(f"on_chat_submit: passing prompt={prompt_value} to ChatResponseHandler")
+            chat_response_handler = ChatResponseHandler(handler.llm_interface, prompt=prompt_value)
+            # Only pass the list of dicts to LangChain, not to ChatRequest (which expects Message objects)
+            # So, skip ChatRequest and pass messages directly to the handler
+            logging.debug(f"Passing messages to chat_response_handler: {messages}")
+            chat_response = chat_response_handler.generate_response(messages)
 
-        # Update UI: code window, diagram preview, status
-        # Return chat history, clear chat input, update code window, image, and status
-        # (Gradio expects outputs in order: chatbox, chat_input, plantuml_code, image, status)
-        return gradio_chat_history, "", plantuml_code_text, pil_image, error_feedback
+            # Extract updated PlantUML code from response
+            raw_response = chat_response.response.content
+            try:
+                extracted_plantuml = extract_last_plantuml_block(raw_response)
+                plantuml_code_text = extracted_plantuml
+                # Trigger diagram re-render
+                pil_image, status_msg = on_rerender(plantuml_code_text)
+                error_feedback = ""
+            except Exception as e:
+                # Extraction failed, keep previous code, show error
+                pil_image, status_msg = None, f"Error extracting PlantUML: {e}"
+                error_feedback = f"⚠️ {status_msg}"
+                # Optionally, keep the raw response in chat for debugging
+
+            # Append the LLM's PlantUML response as an "assistant" message so it displays in the chatbox
+            chat_history = chat_history + [("assistant", raw_response)]
+
+            logging.debug(f"on_chat_submit returning: chat_history={chat_history}, chat_input=''")
+
+            # For Gradio Chatbot, convert chat_history to OpenAI-style messages for display
+            gradio_chat_history = []
+            for role, content in chat_history:
+                if role == "user":
+                    gradio_chat_history.append({"role": "user", "content": content})
+                else:
+                    gradio_chat_history.append({"role": "assistant", "content": content})
+
+            # Update UI: code window, diagram preview, status
+            # Return chat history, clear chat input, update code window, image, and status
+            # (Gradio expects outputs in order: chatbox, chat_input, plantuml_code, image, status)
+            return gradio_chat_history, "", plantuml_code_text, pil_image, error_feedback
+        except Exception as top_err:
+            # Top-level error: keep previous code/diagram, show error
+            logging.error(f"on_chat_submit: Unhandled error: {top_err}", exc_info=True)
+            error_feedback = f"⚠️ Chat error: {top_err}"
+            # Return previous state for code/diagram, and error message
+            gradio_chat_history = []
+            if chat_history:
+                for role, content in chat_history:
+                    if role == "user":
+                        gradio_chat_history.append({"role": "user", "content": content})
+                    else:
+                        gradio_chat_history.append({"role": "assistant", "content": content})
+            return gradio_chat_history, "", plantuml_code_text, None, error_feedback
 
     # --- Existing handlers ---
     def on_generate(desc, dtype):
