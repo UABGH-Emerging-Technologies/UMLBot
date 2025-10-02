@@ -7,7 +7,7 @@ Gradio-based UML Diagram Generator App
 """
 
 import gradio as gr
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Any, Callable
 
 # Workaround for local llm_utils and Design_Drafter import
 import sys
@@ -20,6 +20,7 @@ from Design_Drafter.config.config import Design_DrafterConfig
 
 # Import UMLDraftHandler for diagram generation
 from Design_Drafter.uml_draft_handler import UMLDraftHandler
+from llm_utils.aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
 
 # Use config for diagram types
 
@@ -48,10 +49,11 @@ def _plantuml_encode(text: str) -> str:
     )
     return b64.translate(trans)
 
-def generate_diagram(description: str, diagram_type: str, theme: Optional[str] = None) -> Tuple[Optional[str], Optional[bytes], Optional[str]]:
+def generate_diagram(description: str, diagram_type: str, theme: Optional[str] = None) -> Tuple[str, Image.Image | None, str]:
     """
     Main handler for diagram generation.
-    Returns: (PlantUML code, image bytes, status message)
+    Returns:
+        Tuple[str, Image.Image | None, str]: PlantUML code, PIL image (or None), status message.
     """
     # Securely retrieve the API key using manage_sensitive
 
@@ -138,8 +140,53 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     with gr.Row():
         rerender_btn = gr.Button("Re-render from PlantUML code")
 
+    # --- UML Change Recommendation Chat UI ---
+    gr.Markdown("## UML Change Recommendation Chat")
+    with gr.Row():
+        chatbox = gr.Chatbot(label="UML Change Suggestions", height=300)
+    with gr.Row():
+        chat_input = gr.Textbox(label="Suggest a UML Change", placeholder="Describe your recommended change...", lines=2)
+        submit_chat_btn = gr.Button("Submit Change Suggestion")
+
+    # State for chat history and context
+    chat_state = gr.State([])  # List of (user, message) tuples
+
+    # State for revised UML code (for chat-based revision workflow)
+    revised_uml_code = gr.State("")
+
+
+    def on_chat_submit(user_input, chat_history, plantuml_code_text):
+        """
+        Handles submission of a UML change suggestion in the chat workflow.
+        Adds a single system message combining the current PlantUML and the user's change description.
+        Logs output structure for debugging.
+        """
+        import logging
+        logging.basicConfig(level=logging.DEBUG)
+        if not chat_history:
+            chat_history = []
+        # Add user suggestion
+        chat_history = chat_history + [("user", user_input)]
+        # Compose single system message
+        system_msg = (
+            f"Here's the current PlantUML text:\n"
+            "```plantuml\n"
+            f"{plantuml_code_text.strip()}\n"
+            "```\n"
+            f"And here's the description of how I would like it changed:\n"
+            f"{user_input}\n"
+            "Please return only the updated PlantUML code."
+        )
+        chat_history = chat_history + [("system", system_msg)]
+        logging.debug(f"on_chat_submit returning: chat_history={chat_history}, chat_input=''")
+        return chat_history, ""
+
+    # --- Existing handlers ---
     def on_generate(desc, dtype):
         code, img_bytes, msg = generate_diagram(desc, dtype)
+        # IMPORTANT: The code box value is always REPLACED with the new code from the LLM output.
+        # It is never appended to previous values.
+        # This ensures the code box always reflects only the latest generated diagram.
         # If image is None, show a placeholder error image in preview
         if img_bytes is None:
             # Create a simple error image (red X or text)
@@ -159,6 +206,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         """
         Re-render diagram image from user-edited PlantUML code.
         Does not change the code box content.
+        Only the CURRENT code box value is used to generate the diagram image.
         """
         # --- Proper PlantUML encoding (deflate+base64+URL-safe) ---
         encoded = _plantuml_encode(plantuml_code_text)
@@ -194,6 +242,10 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
             pil_image = error_img
         return pil_image, status_msg
 
+    # --- Chat-based UML revision workflow with error handling ---
+
+
+    # --- UI Logic Wiring ---
     generate_btn.click(
         fn=on_generate,
         inputs=[description, diagram_type],
@@ -205,6 +257,19 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         inputs=[plantuml_code],
         outputs=[image, status]
     )
+
+    # Update UML context display whenever PlantUML code changes
+
+    # Handle chat submission
+    submit_chat_btn.click(
+        fn=on_chat_submit,
+        inputs=[chat_input, chat_state, plantuml_code],
+        outputs=[chatbox, chat_input],
+        queue=False
+    )
+
+    # Add a button for submitting revised UML code (for error correction workflow)
+
 
 if __name__ == "__main__":
     demo.launch()

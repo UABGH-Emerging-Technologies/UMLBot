@@ -32,14 +32,34 @@
 - DownloadController: Serves images to the UI.
   - Code: Part of UI or a small API endpoint.
 
+---
+
+**Chat-Based UML Revision Workflow**
+
+- The chat workflow enables users to iteratively describe, revise, and correct UML diagrams through conversational interaction.
+- The UI (Gradio/Streamlit) relays user messages to the service layer, which orchestrates prompt construction, LLM invocation, and diagram updates.
+- Each chat turn can request new features, corrections, or explanations; the system updates the PlantUML code and diagram accordingly.
+- The workflow supports error correction by leveraging LLM-based auto-repair and surfacing actionable feedback to the user.
+
+**Generic Error Handler Integration**
+
+- The generic error handler is integrated across all layers:
+  - UI: Displays status and error messages, provides fallback diagrams.
+  - Service: Captures errors from LLM, prompt, and rendering steps; attempts auto-correction.
+  - Infrastructure: Handles network and rendering failures, reporting issues to the service layer.
+- All errors are routed through the error handler, ensuring transparency and robust recovery.
+
+---
+
 **LLM Utility Integration**
-- All LLM calls (NLP parsing, auto-repair, possibly chat-based help) should use the `llm_utils/aiweb_common/generate/` classes:
+- All LLM calls (NLP parsing, auto-repair, chat-based revision, error handling) should use the `llm_utils/aiweb_common/generate/` classes:
   - `ChatServicer` for conversational LLM calls.
   - `PromptAssembler` for prompt construction.
   - `QueryInterface` for abstraction.
   - `ObjectFactory` for extensibility (e.g., plugin new diagram types).
   - `WorkflowHandler` for orchestrating multi-step flows and logging.
+  - `GenericErrorHandler` for capturing, reporting, and auto-correcting errors.
 
-This mapping ensures that all LLM-related logic is centralized and reusable, following the project's coding standards and leveraging the common codebase.
+This mapping ensures that all LLM-related logic and error handling are centralized and reusable, following the project's coding standards and leveraging the common codebase.
 
-Next steps: Specify in detail how and where to leverage these LLM interface classes in the design.
+Next steps: Specify in detail how and where to leverage these LLM interface classes and error handler in the design.

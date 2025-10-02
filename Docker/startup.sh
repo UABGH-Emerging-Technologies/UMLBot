@@ -19,8 +19,8 @@ uv sync --locked --all-extras --dev
 make venv
 
 # Ensure every new shell auto-activates the venv
-echo 'source /workspaces/Design_Drafter/.venv/bin/activate' >> /home/vscode/.bashrc
-echo 'source /workspaces/Design_Drafter/.venv/bin/activate' >> /home/vscode/.zshrc
+echo 'source /workspaces/design_drafter/.venv/bin/activate' >> /home/vscode/.bashrc
+echo 'source /workspaces/design_drafter/.venv/bin/activate' >> /home/vscode/.zshrc
 
 echo 'export PYTHONPATH="/workspaces/Design_Drafter/llm_utils:${PYTHONPATH}"' >> ~/.profile
 
