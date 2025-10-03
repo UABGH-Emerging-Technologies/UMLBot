@@ -21,9 +21,7 @@ from Design_Drafter.config.config import Design_DrafterConfig
 
 # Import UMLDraftHandler for diagram generation
 from Design_Drafter.uml_draft_handler import UMLDraftHandler
-from llm_utils.aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
 from llm_utils.aiweb_common.generate.ChatResponse import ChatResponseHandler
-from llm_utils.aiweb_common.generate.ChatSchemas import Message, Role, ChatRequest
 # Use config for diagram types
 
 import requests
