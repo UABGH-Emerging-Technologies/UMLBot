@@ -125,30 +125,30 @@ def generate_diagram(description: str, diagram_type: str, theme: Optional[str] =
 with gr.Blocks(title="UML Diagram Generator") as demo:
     gr.Markdown("# UML Diagram Generator")
 
+    # --- UML Change Recommendation Chat UI (moved to top) ---
+    gr.Markdown("## UML Chat Interface")
     with gr.Row():
-        description = gr.Textbox(label="Diagram Description", lines=6, placeholder="Describe your UML diagram...")
-        diagram_type = gr.Dropdown(
-            label="Diagram Type",
+        diagram_type_dropdown = gr.Dropdown(
             choices=Design_DrafterConfig.DIAGRAM_TYPES,
-            value=Design_DrafterConfig.DIAGRAM_TYPES[0]
+            value=Design_DrafterConfig.DEFAULT_DIAGRAM_TYPE,
+            label="Diagram Type",
+            interactive=True,
+            show_label=True,
         )
+        chat_input = gr.Textbox(label="UML Chat Input", placeholder="Type your UML question or change...", lines=2)
+        submit_chat_btn = gr.Button("Send to UML Chat")
     with gr.Row():
-        gr.Markdown("**Click to send your description to the LLM and generate a UML diagram.**")
-        generate_btn = gr.Button("Send to LLM")
+        chatbox = gr.Chatbot(label="UML Chat History", height=300, type="messages")
+
+    # Remove initial text input and diagram type controls
+    # Only use the Chat interface for all diagram generation and revision
+
     with gr.Row():
         plantuml_code = gr.Code(label="Generated PlantUML Code", interactive=True)
         image = gr.Image(label="Diagram Preview")
     status = gr.Markdown("")
     with gr.Row():
         rerender_btn = gr.Button("Re-render from PlantUML code")
-
-    # --- UML Change Recommendation Chat UI ---
-    gr.Markdown("## UML Change Recommendation Chat")
-    with gr.Row():
-        chatbox = gr.Chatbot(label="UML Change Suggestions", height=300, type="messages")
-    with gr.Row():
-        chat_input = gr.Textbox(label="Suggest a UML Change", placeholder="Describe your recommended change...", lines=2)
-        submit_chat_btn = gr.Button("Submit Change Suggestion")
 
     # State for chat history and context
     chat_state = gr.State([])  # List of (user, message) tuples
@@ -159,27 +159,34 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
 
     from Design_Drafter.utils.plantuml_extractor import extract_last_plantuml_block
 
-    def on_chat_submit(user_input, chat_history, plantuml_code_text):
+    def on_chat_submit(user_input, chat_history, plantuml_code_text, diagram_type):
         """
         Handles submission of a UML change suggestion in the chat workflow.
         Calls the LLM backend and updates the chat and diagram preview.
         After each response, extracts PlantUML code and updates the code window and diagram preview.
         Robust error handling: if any error occurs, previous code/diagram remain visible and user receives feedback.
+
+        The selected diagram_type is injected into the prompt for the LLM backend.
         """
         try:
             logging.basicConfig(level=logging.DEBUG)
             if not chat_history:
                 chat_history = []
+            # Escape curly braces in user input and PlantUML code to avoid template variable mismatch
+            def escape_curly(text: str) -> str:
+                return text.replace("{", "{{").replace("}", "}}")
+            safe_user_input = escape_curly(user_input)
+            safe_plantuml_code = escape_curly(plantuml_code_text.strip())
             # Add user suggestion
             chat_history = chat_history + [("user", user_input)]
-            # Compose single system message
+            # Compose single system message, injecting diagram_type
             system_msg = (
-                f"Here's the current PlantUML text:\n"
+                f"Diagram type: {diagram_type}\n"
+                f"User request: {safe_user_input}\n"
+                f"Current PlantUML code:\n"
                 "```plantuml\n"
-                f"{plantuml_code_text.strip()}\n"
+                f"{safe_plantuml_code}\n"
                 "```\n"
-                f"And here's the description of how I would like it changed:\n"
-                f"{user_input}\n"
                 "Please return only the updated PlantUML code."
             )
             chat_history = chat_history + [("system", system_msg)]
@@ -321,11 +328,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
 
 
     # --- UI Logic Wiring ---
-    generate_btn.click(
-        fn=on_generate,
-        inputs=[description, diagram_type],
-        outputs=[plantuml_code, image, status]
-    )
+    # Remove generate_btn.click wiring, as diagram generation is now handled via chat only
 
     rerender_btn.click(
         fn=on_rerender,
@@ -338,7 +341,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     # Handle chat submission
     submit_chat_btn.click(
         fn=on_chat_submit,
-        inputs=[chat_input, chat_state, plantuml_code],
+        inputs=[chat_input, chat_state, plantuml_code, diagram_type_dropdown],
         outputs=[chatbox, chat_input, plantuml_code, image, status],
         queue=False
     )
