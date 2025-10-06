@@ -20,7 +20,7 @@ def test_chat_history_scrollable_and_persistent(monkeypatch):
     Verifies that the chat history is preserved and all messages (user, assistant, system, error)
     are present and accessible for scrolling in the Gradio UI.
     """
-    from app.gradio_app import format_chat_history
+    from gradio_app import format_chat_history
 
     # Simulate a session with multiple message types
     chat_history = [

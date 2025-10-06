@@ -14,16 +14,25 @@ uv venv "$VENV_PATH" --clear
 # Use the venv's uv
 export PATH="$VENV_PATH/bin:$PATH"
 
+# Sync all development packages
 uv sync --locked --all-extras --dev
 
+# Rebuild the virtual environment (if needed)
 make venv
 
-# Ensure every new shell auto-activates the venv
-echo 'source /workspaces/design_drafter/.venv/bin/activate' >> /home/vscode/.bashrc
-echo 'source /workspaces/design_drafter/.venv/bin/activate' >> /home/vscode/.zshrc
+# Auto-activate the venv for new shells
+echo 'source /workspaces/Design_Drafter/.venv/bin/activate' >> /home/vscode/.bashrc
+echo 'source /workspaces/Design_Drafter/.venv/bin/activate' >> /home/vscode/.zshrc
 
+# Set PYTHONPATH for local modules
 echo 'export PYTHONPATH="/workspaces/Design_Drafter/llm_utils:${PYTHONPATH}"' >> ~/.profile
 
-# Prepare MLFlow
-export MLFLOW_TRACKING_URI="https://.com"
-#export MLFLOW_ARTIFACT_URI = "s3://your-s3-bucket/path"
+# MLFlow setup
+export MLFLOW_TRACKING_URI="http://138.26.48.232:5000/"
+
+# Now, start the Gradio app
+# Replace 'gradio_app.py' with the correct filename if needed
+# Run in background or foreground as desired
+# Example:
+cd "$PROJECT_ROOT"
+python gradio_app.py
