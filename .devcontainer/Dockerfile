@@ -26,3 +26,19 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 # Install Python requirements as vscode
 USER vscode
 
+# Copy requirements.txt first for better cache
+COPY --chown=vscode:vscode requirements.txt /workspaces/Design_Drafter/requirements.txt
+
+# Install pip dependencies
+RUN pip install --no-cache-dir -r /workspaces/Design_Drafter/requirements.txt
+
+# Copy the whole source code (preserves user for devcontainer)
+COPY --chown=vscode:vscode . /workspaces/Design_Drafter/
+
+WORKDIR /workspaces/Design_Drafter
+
+# It's common to EXPOSE Gradio/Flask port, but not strictly needed in devcontainer.
+EXPOSE 7860
+
+# Don't define CMD in a devcontainer Dockerfile, as the devcontainer
+# controls which script is run using the postCreateCommand or by interactive dev.
