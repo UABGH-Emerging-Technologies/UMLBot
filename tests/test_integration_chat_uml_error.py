@@ -5,8 +5,8 @@ Mocks UI/user input and verifies end-to-end error handling and revision workflow
 
 import pytest
 from unittest.mock import Mock
-from Design_Drafter.uml_draft_handler import UMLDraftHandler
-from Design_Drafter.config.config import Design_DrafterConfig
+from uml_draft_handler import UMLDraftHandler
+from config.config import Design_DrafterConfig
 from llm_utils.aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
 
 

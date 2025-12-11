@@ -23,7 +23,23 @@ venv:
 	source .venv/bin/activate && \
 	uv add setuptools wheel && \
 	uv add -r requirements.txt &&\
-	uv pip install -e ".[dev]" 
+	uv pip install -e ".[dev]"
+
+.PHONY: npm-install
+npm-install:
+	cd umlai-ts && npm install
+
+.PHONY: npm-build
+npm-build:
+	cd umlai-ts && npm run build
+
+.PHONY: npm-dev
+npm-dev:
+	cd umlai-ts && npm run dev
+
+.PHONY: test
+test:
+	PYTHONPATH=$(PWD) .venv/bin/python -m pytest -q
 # Docs
 .PHONY: docs
 docs:

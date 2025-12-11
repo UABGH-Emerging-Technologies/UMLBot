@@ -9,7 +9,7 @@
 			"PROJECT_NAME": "Design_Drafter",
             "PYTHON": "3.10.5",
             "USERNAME": "vscode",
-			"NODE_VERSION": "none"
+			"NODE_VERSION": "18" // Node.js is required for npm and frontend builds. Set to LTS version.
 		}
 	},
 

@@ -5,8 +5,8 @@ Covers prompt construction, LLM invocation, and error handling.
 
 import pytest
 from unittest.mock import Mock, patch
-from Design_Drafter.uml_draft_handler import UMLDraftHandler
-from Design_Drafter.config.config import Design_DrafterConfig
+from uml_draft_handler import UMLDraftHandler
+from config.config import Design_DrafterConfig
 
 
 class DummyPrompt:
