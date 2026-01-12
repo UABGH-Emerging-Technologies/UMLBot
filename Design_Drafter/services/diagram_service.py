@@ -69,13 +69,16 @@ def generate_diagram_from_description(
         status_msg = f"LLM error: {exc}. Showing fallback stub."
 
     cleaned_code = _strip_code_block_markers(plantuml_code)
-    image_url = build_plantuml_image_url(cleaned_code)
+    normalized_code = _normalize_curly_braces(cleaned_code)
+    image_url = build_plantuml_image_url(normalized_code)
     pil_image, status_msg = _fetch_plantuml_image(
         image_url=image_url,
         status_msg=status_msg,
     )
+    if pil_image is None:
+        image_url = ""
     return DiagramGenerationResult(
-        plantuml_code=cleaned_code,
+        plantuml_code=normalized_code,
         pil_image=pil_image,
         status_message=status_msg,
         image_url=image_url,
@@ -121,6 +124,17 @@ def _strip_code_block_markers(text: str) -> str:
     return stripped.strip()
 
 
+def _normalize_curly_braces(plantuml_code: str) -> str:
+    """
+    PlantUML expects single curly braces for container nodes.
+    Sometimes LLM output contains doubled braces like {{ ... }}, which breaks rendering.
+    Collapse any repeated opening/closing braces into a single brace.
+    """
+    normalized = re.sub(r"\{+", "{", plantuml_code)
+    normalized = re.sub(r"\}+", "}", normalized)
+    return normalized
+
+
 def _fetch_plantuml_image(
     image_url: str,
     status_msg: str,
@@ -135,7 +149,13 @@ def _fetch_plantuml_image(
         return Image.open(io.BytesIO(resp.content)), status_msg
     except Exception as exc:
         LOGGER.warning("PlantUML rendering failed: %s", exc)
-        status_msg += f" | Diagram rendering failed: {exc}"
+        failure_msg = f"PlantUML rendering failed: {exc}"
+        if status_msg == Design_DrafterConfig.DIAGRAM_SUCCESS_MSG:
+            status_msg = f"Diagram generated, but rendering failed: {exc}"
+        elif status_msg:
+            status_msg = f"{status_msg} | {failure_msg}"
+        else:
+            status_msg = failure_msg
         return None, status_msg
 
 

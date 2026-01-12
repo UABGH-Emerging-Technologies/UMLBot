@@ -1,9 +1,10 @@
 'use client'
+
 import Image from 'next/image'
-import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
-import { RefreshCw, ZoomIn, ZoomOut, RotateCw } from 'lucide-react'
+import { RefreshCw, RotateCw, ZoomIn, ZoomOut } from 'lucide-react'
 import plantumlEncoder from 'plantuml-encoder'
 import { useEffect, useState } from 'react'
+import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 
 type UMLViewerProps = {
 	umlCode: string
@@ -22,7 +23,7 @@ const UMLViewer = ({ umlCode, isGenerating, imageUrl, onImageGenerate }: UMLView
 			}
 
 			const encodedUML = plantumlEncoder.encode(umlCode)
-			const plantUMLServer = 'https://www.plantuml.com/plantuml/svg/'
+			const plantUMLServer = 'http://138.26.48.104:8080/svg/'
 			const url = plantUMLServer + encodedUML
 			setGeneratedImage(url)
 			onImageGenerate?.(url)
@@ -35,59 +36,68 @@ const UMLViewer = ({ umlCode, isGenerating, imageUrl, onImageGenerate }: UMLView
 
 	try {
 		return (
-			<div className="flex flex-col items-center justify-center h-full bg-muted/30 rounded-md p-4 cursor-grab">
+			<div className="flex flex-col items-center justify-center h-full max-h-full bg-muted/30 rounded-md p-4 cursor-grab w-full">
 				{isGenerating ? (
 					<div className="flex flex-col items-center gap-2">
 						<RefreshCw className="animate-spin h-8 w-8" />
 						<p>Generating diagram...</p>
 					</div>
 				) : (
-					<TransformWrapper smooth>
-						{({ zoomIn, zoomOut, resetTransform }) => (
+					<TransformWrapper
+						smooth
+						initialScale={0.8}
+						minScale={0.2}
+						maxScale={4}
+						centerOnInit
+					>
+						{({ zoomIn, zoomOut, resetTransform, centerView }) => (
 							<>
 								{/* Controls */}
-								<div className="flex gap-2 mb-2">
+								<div className="flex gap-2 mb-2 self-end">
 									<button
 										onClick={() => zoomIn()}
-										className="p-2 bg-gray-200 rounded-md"
+										className="p-2 bg-secondary text-secondary-foreground rounded-md"
 									>
 										<ZoomIn />
 									</button>
 									<button
 										onClick={() => zoomOut()}
-										className="p-2 bg-gray-200 rounded-md"
+										className="p-2 bg-secondary text-secondary-foreground rounded-md"
 									>
 										<ZoomOut />
 									</button>
 									<button
-										onClick={() => resetTransform()}
-										className="p-2 bg-gray-200 rounded-md"
+										onClick={() => {
+											resetTransform()
+											centerView(0.8)
+										}}
+										className="p-2 bg-secondary text-secondary-foreground rounded-md"
 									>
 										<RotateCw />
 									</button>
 								</div>
 
 								{/* Image with Zoom & Pan */}
-								<TransformComponent
-									wrapperStyle={{ width: '100%', height: '100%' }}
-								>
-										<div>
-											{previewSrc ? (
-												<Image
-													src={previewSrc}
-													alt="UML Diagram Preview"
-													width={1024}
-													height={768}
-													className="max-w-full max-h-full object-contain"
-													unoptimized
-												/>
-											) : (
-												<p>No diagram available</p>
-											)}
-										</div>
-									</TransformComponent>
-								</>
-							)}
+								<TransformComponent wrapperClass="w-full h-full">
+									<div className="w-full h-full max-h-[60vh] overflow-hidden flex items-center justify-center">
+										{previewSrc ? (
+											<Image
+												src={previewSrc}
+												alt="UML Diagram Preview"
+												width={1600}
+												height={1200}
+												className="w-full h-full object-contain"
+												sizes="100vw"
+												priority
+												unoptimized
+											/>
+										) : (
+											<p>No diagram available</p>
+										)}
+									</div>
+								</TransformComponent>
+							</>
+						)}
 					</TransformWrapper>
 				)}
 			</div>

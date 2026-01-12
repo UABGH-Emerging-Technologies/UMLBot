@@ -73,35 +73,72 @@ const extractPlantUmlBlock = (code: string | null | undefined) => {
 	return match ? match[0] : null
 }
 
+const applyPromptyTemplate = ({
+	template,
+	diagramType,
+	description,
+	theme,
+}: {
+	template: string
+	diagramType: string
+	description: string
+	theme?: string
+}) => {
+	const themeBlockRegex = /\{%\s*if\s+theme\s*%\}[\s\S]*?\{%\s*endif\s*%\}/g
+	let resolved = template
+
+	if (theme) {
+		resolved = resolved
+			.replace(/\{%\s*if\s+theme\s*%\}/g, '')
+			.replace(/\{%\s*endif\s*%\}/g, '')
+			.replace(/\{\{\s*theme\s*\}\}/g, theme)
+	} else {
+		resolved = resolved.replace(themeBlockRegex, '')
+	}
+
+	return resolved
+		.replace(/\{\{\s*diagram_type\s*\}\}/g, diagramType)
+		.replace(/\{\{\s*description\s*\}\}/g, description)
+		.trim()
+}
+
 const buildPromptDescription = ({
 	diagramType,
 	currentCode,
 	chatSummary,
 	latestRequest,
+	promptTemplate,
 }: {
 	diagramType: string
 	currentCode: string
 	chatSummary: string
 	latestRequest: string
+	promptTemplate?: string | null
 }) => {
-	const instructions = [
-		'You are an expert UML assistant.',
-		`Always return valid PlantUML code for a ${diagramType} diagram, enclosed between @startuml and @enduml.`,
-		'Do not include explanations, markdown fences, or commentary—only PlantUML.',
-	]
+	const descriptionSections = [
+		`Latest user request:\n${latestRequest}`,
+		currentCode
+			? `Existing PlantUML (reuse and refine rather than restart):\n${currentCode}`
+			: 'No diagram has been created yet. Create a fresh PlantUML diagram.',
+		chatSummary ? `Recent conversation:\n${chatSummary}` : '',
+		'Respond with PlantUML only between @startuml and @enduml.',
+	].filter(Boolean)
 
-	const currentSection = currentCode
-		? `Current PlantUML diagram:\n${currentCode}\n`
-		: 'No diagram has been created yet.'
+	const composedDescription = descriptionSections.join('\n\n')
 
-	const historySection = chatSummary ? `Recent conversation:\n${chatSummary}\n` : ''
+	if (promptTemplate) {
+		return applyPromptyTemplate({
+			template: promptTemplate,
+			diagramType,
+			description: composedDescription,
+		})
+	}
 
 	return [
-		instructions.join(' '),
-		currentSection,
-		historySection,
-		`Latest user request:\n${latestRequest}`,
-		'Update the PlantUML diagram to satisfy the latest request while preserving relevant structure.',
+		'You are an expert UML assistant following the prompty template rules.',
+		`Diagram Type: ${diagramType}`,
+		'Generate valid PlantUML enclosed between @startuml and @enduml with concise, professional notation. No extra prose or markdown fences.',
+		composedDescription,
 	].join('\n\n')
 }
 
@@ -118,6 +155,7 @@ export default function UMLGenerator() {
 	const [image, setImage] = useState('')
 	const [isCopied, setIsCopied] = useState(false)
 	const [errorMsg, setErrorMsg] = useState<string | null>(null)
+	const [promptTemplate, setPromptTemplate] = useState<string | null>(null)
 
 	// Toggle dark mode
 	useEffect(() => {
@@ -127,6 +165,26 @@ export default function UMLGenerator() {
 			document.documentElement.classList.remove('dark')
 		}
 	}, [isDarkMode])
+
+	useEffect(() => {
+		const fetchPromptTemplate = async () => {
+			try {
+				const response = await fetch('/api/prompts/uml')
+				if (!response.ok) {
+					throw new Error(`Failed to load prompt template: ${response.status}`)
+				}
+				const data = await response.json()
+				if (data.template) {
+					setPromptTemplate(data.template)
+				}
+			} catch (error) {
+				console.error('Unable to load UML prompt template', error)
+				setPromptTemplate(null)
+			}
+		}
+
+		fetchPromptTemplate()
+	}, [])
 
 	const handleSendMessage = async () => {
 		const trimmedInput = chatInput.trim()
@@ -153,12 +211,16 @@ export default function UMLGenerator() {
 				currentCode: umlCode,
 				chatSummary: historyPrompt,
 				latestRequest: trimmedInput,
+				promptTemplate,
 			})
 
 			const result = await generateUMLAction(composedDescription, diagramType)
 			if (result.status === 'ok') {
-				const normalizedCode = extractPlantUmlBlock(result.plantuml_code) ?? umlCode
-				if (normalizedCode && normalizedCode !== umlCode) {
+				const normalizedCode =
+					extractPlantUmlBlock(result.plantuml_code) ??
+					result.plantuml_code ??
+					umlCode
+				if (normalizedCode !== umlCode) {
 					setUmlCode(normalizedCode)
 				}
 				if (result.image_base64) {
@@ -181,6 +243,7 @@ export default function UMLGenerator() {
 			} else {
 				const failureMsg = result.message || 'Failed to generate UML diagram'
 				setErrorMsg(failureMsg)
+				setIsRefreshing(false)
 				setChatHistory(prev => [
 					...prev,
 					{ id: createMessageId(), role: 'error', content: failureMsg },
@@ -193,6 +256,7 @@ export default function UMLGenerator() {
 					? error.message || 'Something went wrong/Out of credits'
 					: 'Something went wrong/Out of credits'
 			setErrorMsg(message)
+			setIsRefreshing(false)
 			setChatHistory(prev => [
 				...prev,
 				{ id: createMessageId(), role: 'error', content: message },
@@ -264,6 +328,8 @@ export default function UMLGenerator() {
 		if (nextTemplate && (umlCode.trim().length === 0 || umlCode === currentTemplate)) {
 			setUmlCode(nextTemplate)
 		}
+		setImage('')
+		setIsRefreshing(true)
 	}
 
 	const handleCopy = () => {
@@ -380,11 +446,12 @@ export default function UMLGenerator() {
 								<h2 className="text-base font-semibold">Tips</h2>
 							</div>
 							<ul className="text-sm text-muted-foreground grid gap-1 md:grid-cols-2 md:gap-x-4 md:gap-y-1">
-								<li>• Select the diagram you need.</li>
+								<li>• Switch templates to explore available UML diagram types</li>
+								<li>• Select the diagram you need</li>
 								<li>• When revising, refer to existing elements</li>
-								<li>• Switch templates to explore other UML diagram types.</li>
-								<li>• Fine-tune the PlantUML code directly in the editor.</li>
-								<li>• Refresh the page to wipe memory - save prompts elsewhere as necessary</li>
+								<li>• Fine-tune the PlantUML code directly in the editor</li>
+								<li>• Refresh the page to wipe memory </li>
+								<li>• Save prompts elsewhere in early adoption</li>
 							</ul>
 						</CardContent>
 					</Card>
@@ -399,7 +466,7 @@ export default function UMLGenerator() {
 									<div>
 										<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
 											<LayoutTemplate className="h-4 w-4 text-primary" />
-											Templates
+											Diagram Types
 										</h3>
 										<div className="space-y-2">
 											<Select
@@ -536,21 +603,21 @@ export default function UMLGenerator() {
 							<TabsContent value="editor" className="mt-0">
 								<Card>
 									<CardContent className="p-0">
-										<div className="border rounded-md">
-											<div className="bg-muted/50 p-2 border-b flex items-center justify-between">
-												<div className="text-sm font-medium">PlantUML Code</div>
-												<div className="text-xs text-muted-foreground">
-													Syntax: PlantUML
+											<div className="border rounded-md">
+												<div className="bg-muted/50 p-2 border-b flex items-center justify-between">
+													<div className="text-sm font-medium">PlantUML Code</div>
+													<div className="text-xs text-muted-foreground">
+														Syntax: PlantUML
+													</div>
 												</div>
-											</div>
-											<div
-												ref={editorRef}
-												className="p-4 font-mono text-sm h-[500px] overflow-auto"
-											>
-												<Textarea
-													value={umlCode}
-													onChange={e => setUmlCode(e.target.value)}
-													className="font-mono h-full border-0 focus-visible:ring-0 resize-none"
+												<div
+													ref={editorRef}
+													className="p-4 font-mono text-sm h-[70vh] overflow-auto"
+												>
+													<Textarea
+														value={umlCode}
+														onChange={e => setUmlCode(e.target.value)}
+														className="font-mono h-full border-0 focus-visible:ring-0 resize-none"
 												/>
 											</div>
 										</div>
@@ -561,16 +628,16 @@ export default function UMLGenerator() {
 							<TabsContent value="preview" className="mt-0">
 								<Card>
 									<CardContent className="p-0">
-										<div className="border rounded-md">
-											<div className="bg-muted/50 p-2 border-b flex items-center justify-between">
-												<div className="text-sm font-medium">
-													Diagram Preview
+											<div className="border rounded-md">
+												<div className="bg-muted/50 p-2 border-b flex items-center justify-between">
+													<div className="text-sm font-medium">
+														Diagram Preview
+													</div>
+													<div className="text-xs text-muted-foreground">
+														{isBusy ? 'Generating...' : 'Ready'}
+													</div>
 												</div>
-												<div className="text-xs text-muted-foreground">
-													{isBusy ? 'Generating...' : 'Ready'}
-												</div>
-											</div>
-											<div className="h-[500px] overflow-auto">
+											<div className="h-[70vh] overflow-hidden">
 												{renderUML()}
 											</div>
 										</div>
@@ -591,7 +658,7 @@ export default function UMLGenerator() {
 														Syntax: PlantUML
 													</div>
 												</div>
-												<div className="p-4 font-mono text-sm h-[500px] overflow-auto">
+												<div className="p-4 font-mono text-sm h-[70vh] overflow-auto">
 													<Textarea
 														value={umlCode}
 														onChange={e => setUmlCode(e.target.value)}
@@ -604,18 +671,18 @@ export default function UMLGenerator() {
 
 									<Card>
 										<CardContent className="p-0">
-											<div className="border rounded-md">
+												<div className="border rounded-md">
 												<div className="bg-muted/50 p-2 border-b flex items-center justify-between">
-												<div className="text-sm font-medium">
-													Diagram Preview
+													<div className="text-sm font-medium">
+														Diagram Preview
+													</div>
+													<div className="text-xs text-muted-foreground">
+														{isBusy ? 'Generating...' : 'Ready'}
+													</div>
 												</div>
-												<div className="text-xs text-muted-foreground">
-													{isBusy ? 'Generating...' : 'Ready'}
+												<div className="h-[70vh] border overflow-hidden">
+													{renderUML()}
 												</div>
-											</div>
-											<div className="h-[500px] border overflow-auto">
-												{renderUML()}
-											</div>
 											</div>
 										</CardContent>
 									</Card>

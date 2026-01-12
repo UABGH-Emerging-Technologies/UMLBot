@@ -40,7 +40,7 @@ This section describes the end-to-end workflow for rendering and revising UML di
   The generated PlantUML code is URL-encoded using `urllib.parse.quote`.
 
 - **Image URL Construction:**  
-  The encoded string is inserted into a PlantUML server URL template (e.g., `https://www.plantuml.com/plantuml/png/{encoded}`).
+  The encoded string is inserted into a PlantUML server URL template (e.g., `http://138.26.48.104:8080/svg/{encoded}`).
 
 - **Image Fetch:**  
   The app sends an HTTP GET request to the PlantUML server to retrieve the rendered diagram image.
