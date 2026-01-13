@@ -1,0 +1,6 @@
+{
+  "/api/prompts/uml/route": "app/api/prompts/uml/route.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js"
+}
