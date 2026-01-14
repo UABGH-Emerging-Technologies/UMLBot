@@ -4,6 +4,7 @@
 
 - `.env`, `.env.*`
 - `.venv`, `.venv.*`
+- `secrets/`
 - `supersecrets.txt`
 - `credentials.json`
 - `*.pem`, `*.key`
