@@ -2,12 +2,11 @@
 ARG VARIANT="3.11-bullseye"
 FROM mcr.microsoft.com/devcontainers/python:0-${VARIANT}
 
-# [Choice] Node.js version is set via build ARG; keep as in your original
 ARG NODE_VERSION="none"
-RUN if [ "${NODE_VERSION}" != "none" ]; then su vscode -c "umask 0002 && . /usr/local/share/nvm/nvm.sh && nvm install ${NODE_VERSION} 2>&1"; fi
 
-# System dependencies for image/PIL support & other scientific deps
-RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | tee /usr/share/keyrings/yarn.gpg > /dev/null \
+    && echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian stable main" | tee /etc/apt/sources.list.d/yarn.list \
+    && apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
         sqlite3 \
         cmake \
@@ -20,9 +19,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
-# Optionally copy any local fonts if you want to use custom ones:
-# COPY fonts /usr/share/fonts/truetype/custom-fonts
+RUN if [ "${NODE_VERSION}" != "none" ]; then \
+        su vscode -c "umask 0002 && . /usr/local/share/nvm/nvm.sh && nvm install ${NODE_VERSION} 2>&1"; \
+    fi
 
-# Install Python requirements as vscode
 USER vscode
-
