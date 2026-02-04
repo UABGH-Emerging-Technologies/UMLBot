@@ -1,6 +1,6 @@
 import pytest
-from llm_interface import LangchainLLMAdapter, LLMInterface
-from exceptions import LLMError
+from UMLBot.llm_interface import LangchainLLMAdapter, LLMInterface
+from UMLBot.exceptions import LLMError
 
 def test_adapter_invokes_callable():
     def mock_llm(prompt: str) -> str:

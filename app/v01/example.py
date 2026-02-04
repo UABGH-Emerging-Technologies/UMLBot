@@ -1,3 +1,5 @@
+"""Example v01 endpoint implementations."""
+
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +18,7 @@ router = APIRouter(tags=[""])
 def get_task_response(
     request: RequestCategorization, file_encoded: str, background_tasks: BackgroundTasks
 ) -> MSExcelResponse:
+    """Process an uploaded file and return a categorized response."""
 
     handler = FastAPIHandler(azure_key=Config.AZURE_DOCAI_KEY)
     zs_prompty = Path(Config.ZS_PROMPTY)
@@ -47,6 +50,7 @@ def get_task_response(
 async def process_categorize(
     background_tasks: BackgroundTasks, request: RequestCategorization
 ) -> MSExcelResponse:
+    """FastAPI endpoint for file categorization."""
     # This example task returns a MS Excel document.
     response = get_task_response(request, request.file_encoded, background_tasks)
 

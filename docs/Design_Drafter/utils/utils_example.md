@@ -1,1 +1,1 @@
-::: Design_Drafter.utils.utils_example
+::: UMLBot.utils.utils_example

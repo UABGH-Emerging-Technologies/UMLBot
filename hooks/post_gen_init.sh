@@ -1,9 +1,9 @@
 #!/bin/bash
 # Define your variables here
-project_name="Design_Drafter"
+project_name="UMLBot"
 author="Ryan Godwin"
 author_email="ryangodwin@uabmc.edu"
-repository_url="https://github.com/UABGH-Emerging-Technologies/design_drafter"
+repository_url="https://github.com/UABGH-Emerging-Technologies/UMLBot"
 data_dir="data"
 data_directory_name="DATASCI"
 

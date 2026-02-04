@@ -20,21 +20,26 @@ class UMLRetryManager:
     """
 
     def __init__(self, max_retries: int = 3) -> None:
+        """Initialize the retry manager with a maximum retry count."""
         self.max_retries = max_retries
         self.attempt = 0
         self.errors: list[str] = []
 
     def record_error(self, error: Exception) -> None:
+        """Record an error and increment the attempt counter."""
         self.attempt += 1
         self.errors.append(str(error))
 
     def should_retry(self) -> bool:
+        """Return True when another retry attempt is allowed."""
         return self.attempt < self.max_retries
 
     def last_error(self) -> str:
+        """Return the most recent error message, or empty string if none."""
         return self.errors[-1] if self.errors else ""
 
     def error_context(self) -> str:
+        """Return a multi-line summary of attempts and errors."""
         return "\n".join(f"Attempt {i+1}: {msg}" for i, msg in enumerate(self.errors))
 
 
@@ -56,7 +61,7 @@ def escape_curly_braces(val: Optional[str]) -> Optional[str]:
 
 
 from llm_utils.aiweb_common.WorkflowHandler import WorkflowHandler
-from Design_Drafter.config.config import Design_DrafterConfig
+from UMLBot.config.config import UMLBotConfig
 
 
 class UMLDraftHandler(WorkflowHandler):
@@ -67,10 +72,11 @@ class UMLDraftHandler(WorkflowHandler):
         prompty_path (Path): Path to the prompty file.
     """
 
-    def __init__(self, config: Optional[Design_DrafterConfig] = None):
+    def __init__(self, config: Optional[UMLBotConfig] = None):
+        """Initialize the handler with optional configuration overrides."""
         super().__init__()
         self.prompty_path = Path("assets/uml_diagram.prompty")
-        self.config = config or Design_DrafterConfig()
+        self.config = config or UMLBotConfig()
 
     def _validate_prompt_template(self, template: str) -> None:
         """

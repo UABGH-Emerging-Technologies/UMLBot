@@ -1,6 +1,6 @@
-# Design_Drafter
+# UMLBot
 
-Design_Drafter is an interactive tool for generating, revising, and validating UML diagrams using a chat-based workflow powered by LLMs. The system supports iterative UML refinement, automatic error correction, and transparent error reporting, all accessible through a conversational interface.
+UMLBot is an interactive tool for generating, revising, and validating UML diagrams using a chat-based workflow powered by LLMs. The system supports iterative UML refinement, automatic error correction, and transparent error reporting, all accessible through a conversational interface.
 
 ## Features
 
@@ -76,8 +76,8 @@ The VS Code devcontainer/Docker flow will automatically spin up both the Gradio 
 ### 4. Documentation
 
 - [Architecture Overview](docs/architecture.md)
-- [UML Rendering & Error Handling Workflow](docs/Design_Drafter_streamlit_app.md)
-- [Configuration](docs/Design_Drafter/config/config.md)
+- [UML Rendering & Error Handling Workflow](docs/UMLBot_streamlit_app.md)
+- [Configuration](docs/UMLBot/config/config.md)
 - [Test Coverage](tests/README.md)
 
 See the [docs/](docs/index.md) directory for more details.

@@ -13,17 +13,17 @@ from pathlib import Path
 import gradio as gr
 from PIL import Image, ImageDraw, ImageFont
 
-# Workaround for local llm_utils and Design_Drafter import
+# Workaround for local llm_utils and UMLBot import
 sys.path.append(str(Path(__file__).parent.parent / "llm_utils"))
 sys.path.append(str(Path(__file__).parent.parent))
 
-from Design_Drafter.api_server import create_api_app
-from Design_Drafter.config.config import Design_DrafterConfig
-from Design_Drafter.services import (
+from UMLBot.api_server import create_api_app
+from UMLBot.config.config import UMLBotConfig
+from UMLBot.services import (
     generate_diagram_from_description,
     render_diagram_from_code,
 )
-from Design_Drafter.uml_draft_handler import UMLDraftHandler
+from UMLBot.uml_draft_handler import UMLDraftHandler
 from llm_utils.aiweb_common.generate.ChatResponse import ChatResponseHandler
 
 
@@ -34,8 +34,8 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     gr.Markdown("## UML Chat Interface")
     with gr.Row():
         diagram_type_dropdown = gr.Dropdown(
-            choices=Design_DrafterConfig.DIAGRAM_TYPES,
-            value=Design_DrafterConfig.DEFAULT_DIAGRAM_TYPE,
+            choices=UMLBotConfig.DIAGRAM_TYPES,
+            value=UMLBotConfig.DEFAULT_DIAGRAM_TYPE,
             label="Diagram Type",
             interactive=True,
             show_label=True,
@@ -79,7 +79,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     # State for revised UML code (for chat-based revision workflow)
     revised_uml_code = gr.State("")
 
-    from Design_Drafter.utils.plantuml_extractor import extract_last_plantuml_block
+    from UMLBot.utils.plantuml_extractor import extract_last_plantuml_block
 
     def format_chat_history(chat_history):
         """
@@ -160,12 +160,12 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         # Call the LLM backend with retry logic
         handler = UMLDraftHandler()
         handler._init_openai(
-            openai_compatible_endpoint=Design_DrafterConfig.LLM_API_BASE,
-            openai_compatible_key=Design_DrafterConfig.LLM_API_KEY,
-            openai_compatible_model=Design_DrafterConfig.LLM_MODEL,
-            name="Design_Drafter",
+            openai_compatible_endpoint=UMLBotConfig.LLM_API_BASE,
+            openai_compatible_key=UMLBotConfig.LLM_API_KEY,
+            openai_compatible_model=UMLBotConfig.LLM_MODEL,
+            name="UMLBot",
         )
-        from Design_Drafter.uml_draft_handler import UMLRetryManager
+        from UMLBot.uml_draft_handler import UMLRetryManager
 
         retry_manager = UMLRetryManager(max_retries=3)
         raw_response = None

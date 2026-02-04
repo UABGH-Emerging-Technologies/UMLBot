@@ -1,5 +1,5 @@
 [project]
-name = "Design_Drafter"
+name = "UMLBot"
 version = "0.1.0"
 description = "PoC"
 requires-python = ">=3.11"
@@ -92,4 +92,9 @@ dev = [
   "black[jupyter]",
   "mkdocstrings[python]",
   "mkdocs-monorepo-plugin"
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore::pydantic.warnings.PydanticDeprecatedSince20",
 ]

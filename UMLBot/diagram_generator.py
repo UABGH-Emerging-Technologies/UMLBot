@@ -1,9 +1,11 @@
+"""Diagram generator abstractions and UML implementation."""
+
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from Design_Drafter.prompt_manager import PromptManager
-from Design_Drafter.retry_policy import RetryPolicy
-from Design_Drafter.exceptions import RetryExceededError
+from UMLBot.prompt_manager import PromptManager
+from UMLBot.retry_policy import RetryPolicy
+from UMLBot.exceptions import RetryExceededError
 
 class DiagramGenerator(ABC):
     """Abstract base class for diagram generation."""
@@ -39,6 +41,7 @@ class UMLDiagramGenerator(DiagramGenerator):
         llm: object,  # Must provide .invoke(prompt: str) -> str
         retry: RetryPolicy
     ) -> None:
+        """Initialize the UML diagram generator."""
         self.prompt_manager = prompt_manager
         self.llm = llm
         self.retry = retry

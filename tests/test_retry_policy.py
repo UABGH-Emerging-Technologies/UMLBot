@@ -1,5 +1,5 @@
 import pytest
-from retry_policy import RetryPolicy
+from UMLBot.retry_policy import RetryPolicy
 
 def test_initial_state():
     rp = RetryPolicy(max_retries=2)

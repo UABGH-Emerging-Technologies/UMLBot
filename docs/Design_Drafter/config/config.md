@@ -1,1 +1,1 @@
-::: Design_Drafter.config.config
+::: UMLBot.config.config

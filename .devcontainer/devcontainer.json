@@ -6,7 +6,7 @@
 		"dockerfile": "Dockerfile",
 		"context": "..",
 		"args": { 
-			"PROJECT_NAME": "Design_Drafter",
+			"PROJECT_NAME": "UMLBot",
             "PYTHON": "3.10.5",
             "USERNAME": "vscode",
 			"NODE_VERSION": "18" // Node.js is required for npm and frontend builds. Set to LTS version.
@@ -18,7 +18,7 @@
 
 	// change for the specific project
 	"mounts": [
-		"source=/mnt/p/Secrets,target=/workspaces/Design_Drafter/secrets,readonly,type=bind"  // Mount secrets
+		"source=/mnt/p/Secrets,target=/workspaces/UMLBot/secrets,readonly,type=bind"  // Mount secrets
 	  ],
 
 	//mlflow port
@@ -61,7 +61,7 @@
 
 	"env": {
     "MLFLOW_TRACKING_URI": "http://138.26.48.232:5000/",
-    "MLFLOW_EXPERIMENT_NAME": "Design_Drafter"
+    "MLFLOW_EXPERIMENT_NAME": "UMLBot"
   	},	
 
 	// Use 'postCreateCommand' to run commands after the container is created.

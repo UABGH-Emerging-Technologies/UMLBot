@@ -1,3 +1,5 @@
+"""Packaging configuration for Design Drafter."""
+
 from pathlib import Path
 
 from setuptools import find_packages, setup
@@ -33,12 +35,12 @@ dev_packages = [
 
 # Define our package
 setup(
-    name="design_drafter",
+    name="UMLBot",
     version="0.01",
     description="An app to allow creation and refinement of UML diagrams fromo plain language text with generative AI and plantUML",
     author="Ryan Godwin",
     author_email="ryangodwin@uabmc.edu",
-    url="https://github.com/UABGH-Emerging-Technologies/design_drafter",
+    url="https://github.com/UABGH-Emerging-Technologies/UMLBot",
     python_requires=">=3.8",
     packages=find_packages(),
     install_requires=[required_packages],

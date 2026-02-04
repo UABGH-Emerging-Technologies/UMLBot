@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
-from prompt_manager import PromptManager
-from exceptions import TemplateError
+from UMLBot.prompt_manager import PromptManager
+from UMLBot.exceptions import TemplateError
 
 TEST_TEMPLATE_PATH = Path("assets/uml_diagram.prompty")
 

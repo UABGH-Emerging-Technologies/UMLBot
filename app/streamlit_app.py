@@ -5,8 +5,8 @@ Each tab calls a function from streamlit_handler to display its content.
 
 import streamlit as st
 from aiweb_common.streamlit.page_renderer import StreamlitUIHelper
-from Design_Drafter.config.config import Design_DrafterConfig
-from Design_Drafter.sample_handler import StreamlitBaseHandler
+from UMLBot.config.config import UMLBotConfig
+from UMLBot.sample_handler import StreamlitBaseHandler
 
 
 def main():

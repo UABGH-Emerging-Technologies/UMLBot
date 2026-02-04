@@ -5,8 +5,8 @@ Mocks UI/user input and verifies end-to-end error handling and revision workflow
 
 import pytest
 from unittest.mock import Mock
-from uml_draft_handler import UMLDraftHandler
-from config.config import Design_DrafterConfig
+from UMLBot.uml_draft_handler import UMLDraftHandler
+from UMLBot.config.config import UMLBotConfig
 from llm_utils.aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
 
 
@@ -47,7 +47,7 @@ def test_chat_history_scrollable_and_persistent(monkeypatch):
 
 def test_chat_uml_revision_with_error_handler(monkeypatch):
     # Simulate a chat workflow where the first UML generation fails, then succeeds after correction
-    handler = UMLDraftHandler(config=Design_DrafterConfig())
+    handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
     monkeypatch.setattr(handler, "check_content_type", lambda x: x)
 
@@ -63,7 +63,7 @@ def test_chat_uml_revision_with_error_handler(monkeypatch):
 
     def operation():
         try:
-            from Design_Drafter.uml_draft_handler import UMLRetryManager
+            from UMLBot.uml_draft_handler import UMLRetryManager
 
             return handler.process(
                 "class",
@@ -99,7 +99,7 @@ def test_chat_uml_revision_with_error_handler(monkeypatch):
 
 def test_integration_respects_retry_limit(monkeypatch):
     # Simulate repeated failures and ensure retry limit is respected
-    handler = UMLDraftHandler(config=Design_DrafterConfig())
+    handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
     monkeypatch.setattr(handler, "check_content_type", lambda x: x)
 
@@ -109,7 +109,7 @@ def test_integration_respects_retry_limit(monkeypatch):
 
     def operation():
         try:
-            from Design_Drafter.uml_draft_handler import UMLRetryManager
+            from UMLBot.uml_draft_handler import UMLRetryManager
 
             return handler.process(
                 "class",

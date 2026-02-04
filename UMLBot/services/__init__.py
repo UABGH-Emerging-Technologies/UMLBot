@@ -1,3 +1,5 @@
+"""Service layer exports for diagram generation."""
+
 from .diagram_service import (
     DiagramGenerationResult,
     generate_diagram_from_description,

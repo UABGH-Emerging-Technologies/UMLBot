@@ -8,8 +8,8 @@ from PIL import Image
 
 os.environ.setdefault("azure_proxy_key", "test-key")
 
-from Design_Drafter.api_server import create_api_app
-from Design_Drafter.services.diagram_service import DiagramGenerationResult
+from UMLBot.api_server import create_api_app
+from UMLBot.services.diagram_service import DiagramGenerationResult
 
 
 @pytest.fixture

@@ -1,4 +1,5 @@
-# config.py
+"""Application configuration for Design Drafter."""
+
 import logging
 import logging.config
 import sys
@@ -6,7 +7,7 @@ from pathlib import Path
 from aiweb_common.WorkflowHandler import manage_sensitive
 
 
-class Design_DrafterConfig:
+class UMLBotConfig:
     """
     Configuration class for Design Drafter.
 
@@ -78,7 +79,7 @@ class Design_DrafterConfig:
 
 
 # Make sure log directory exists
-Design_DrafterConfig.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+UMLBotConfig.LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 logging_config = {
     "version": 1,
@@ -98,7 +99,7 @@ logging_config = {
         },
         "info": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": str(Design_DrafterConfig.LOGS_DIR / "info.log"),
+            "filename": str(UMLBotConfig.LOGS_DIR / "info.log"),
             "maxBytes": 10485760,
             "backupCount": 10,
             "formatter": "detailed",
@@ -107,7 +108,7 @@ logging_config = {
         },
         "error": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": str(Design_DrafterConfig.LOGS_DIR / "error.log"),
+            "filename": str(UMLBotConfig.LOGS_DIR / "error.log"),
             "maxBytes": 10485760,
             "backupCount": 10,
             "formatter": "detailed",

@@ -1,3 +1,5 @@
+"""FastAPI app factory for the Design Drafter HTTP API."""
+
 from __future__ import annotations
 
 import logging
@@ -8,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from Design_Drafter.services import (
+from UMLBot.services import (
     DiagramGenerationResult,
     diagram_image_to_base64,
     generate_diagram_from_description,
@@ -32,9 +34,7 @@ def create_api_app(
 
     @api_app.post("/api/generate")
     async def generate_endpoint(request: Request):
-        """
-        HTTP POST endpoint for diagram generation used by the Next.js frontend.
-        """
+        """Handle diagram generation requests from the frontend."""
         try:
             data = await request.json()
             description = data.get("description")

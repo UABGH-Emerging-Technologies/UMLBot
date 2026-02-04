@@ -1,3 +1,5 @@
+"""FastAPI server entrypoint for the Design Drafter app."""
+
 import uvicorn
 from aiweb_common.fastapi.helper_apis import router as utils_router
 from fastapi import FastAPI
@@ -13,6 +15,7 @@ app.include_router(v01_example_router)
 # TODO: standardize in something like aiweb commmon and include from there.
 @app.get("/health")
 def health_check():
+    """Return a basic health status for uptime checks."""
     return {"status": "healthy"}
 
 

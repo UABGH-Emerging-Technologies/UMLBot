@@ -1,15 +1,15 @@
 # mkdocs.yml
-site_name: Design_Drafter
+site_name: UMLBot
 site_url: https://sites.uab.edu/periop-datascience/
 repo_url: https://github.com/uabperiopai
 nav:
   - Home: index.md
-  - 'Design_Drafter':
-    - Streamlit Interface: 'Design_Drafter/sample_handler.md'
-    - User Interface: 'Design_Drafter_streamlit_app.md'
-    - Example: 'Design_Drafter/utils/utils_example.md'
-  - 'Design_Drafter/config':
-    - Config: 'Design_Drafter/config/config.md'
+  - 'UMLBot':
+    - Streamlit Interface: 'UMLBot/sample_handler.md'
+    - User Interface: 'UMLBot_streamlit_app.md'
+    - Example: 'UMLBot/utils/utils_example.md'
+  - 'UMLBot/config':
+    - Config: 'UMLBot/config/config.md'
 
   - llm_utils: '!include ./llm_utils/mkdocs.yml'
 
@@ -24,7 +24,7 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          paths: ['Design_Drafter', 'Design_Drafter/config', user_interface, llm_utils]  # search packages in these folders
+          paths: ['UMLBot', 'UMLBot/config', user_interface, llm_utils]  # search packages in these folders
 watch:
   - .  # reload docs for any file changes
 use_directory_urls: false

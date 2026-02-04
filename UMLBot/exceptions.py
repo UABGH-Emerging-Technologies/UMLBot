@@ -1,4 +1,4 @@
-"""Custom exceptions for Design_Drafter modules."""
+"""Custom exceptions for UMLBot modules."""
 
 class TemplateError(Exception):
     """Raised when a prompt template is invalid or cannot be rendered."""

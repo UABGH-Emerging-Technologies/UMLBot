@@ -26,7 +26,7 @@ This section describes the end-to-end workflow for rendering and revising UML di
   The user provides a free-text description and selects a UML diagram type (and optionally a theme) in the Gradio UI.
 
 - **Prompt Construction:**  
-  The [`UMLDraftHandler`](../Design_Drafter/uml_draft_handler.py) loads a prompty template and fills in variables (`diagram_type`, `description`, `theme`).  
+  The [`UMLDraftHandler`](../UMLBot/uml_draft_handler.py) loads a prompty template and fills in variables (`diagram_type`, `description`, `theme`).  
   - The template is validated for required placeholders.
   - If the template or variables are invalid, a `ValueError` is raised.
 
@@ -92,5 +92,5 @@ sequenceDiagram
 ## References
 
 - [app/gradio_app.py](../app/gradio_app.py)
-- [Design_Drafter/uml_draft_handler.py](../Design_Drafter/uml_draft_handler.py)
+- [UMLBot/uml_draft_handler.py](../UMLBot/uml_draft_handler.py)
 - [assets/uml_diagram.prompty](../assets/uml_diagram.prompty)

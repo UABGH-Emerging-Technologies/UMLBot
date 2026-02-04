@@ -1,6 +1,8 @@
+"""Retry policy helpers for LLM-backed operations."""
+
 from typing import List
 
-from Design_Drafter.exceptions import RetryExceededError
+from UMLBot.exceptions import RetryExceededError
 
 class RetryPolicy:
     """Manages retry logic for operations.
@@ -15,6 +17,7 @@ class RetryPolicy:
     """
 
     def __init__(self, max_retries: int = 3, backoff_seconds: float = 0.0) -> None:
+        """Initialize retry limits and backoff timing."""
         self.max_retries = max_retries
         self.backoff_seconds = backoff_seconds
         self.errors: List[Exception] = []

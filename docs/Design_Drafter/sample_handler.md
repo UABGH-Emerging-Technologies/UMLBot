@@ -1,1 +1,1 @@
-::: Design_Drafter.sample_handler
+::: UMLBot.sample_handler

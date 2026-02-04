@@ -1,3 +1,5 @@
+"""Diagram generation services and PlantUML rendering helpers."""
+
 from __future__ import annotations
 
 import base64
@@ -11,14 +13,15 @@ from typing import Optional, Tuple
 import requests
 from PIL import Image, ImageDraw, ImageFont
 
-from Design_Drafter.config.config import Design_DrafterConfig
-from Design_Drafter.uml_draft_handler import UMLDraftHandler
+from UMLBot.config.config import UMLBotConfig
+from UMLBot.uml_draft_handler import UMLDraftHandler
 
 LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
 class DiagramGenerationResult:
+    """Result container for a UML generation request."""
     plantuml_code: str
     pil_image: Image.Image | None
     status_message: str
@@ -35,21 +38,21 @@ def generate_diagram_from_description(
     Errors are converted to a fallback PlantUML stub with contextual messaging.
     """
     try:
-        api_key = Design_DrafterConfig.LLM_API_KEY
+        api_key = UMLBotConfig.LLM_API_KEY
     except KeyError:
         return DiagramGenerationResult(
             plantuml_code="",
             pil_image=None,
-            status_message=Design_DrafterConfig.API_KEY_MISSING_MSG,
+            status_message=UMLBotConfig.API_KEY_MISSING_MSG,
             image_url="",
         )
 
     handler = UMLDraftHandler()
     handler._init_openai(
-        openai_compatible_endpoint=Design_DrafterConfig.LLM_API_BASE,
+        openai_compatible_endpoint=UMLBotConfig.LLM_API_BASE,
         openai_compatible_key=api_key,
-        openai_compatible_model=Design_DrafterConfig.LLM_MODEL,
-        name="Design_Drafter",
+        openai_compatible_model=UMLBotConfig.LLM_MODEL,
+        name="UMLBot",
     )
 
     try:
@@ -59,10 +62,10 @@ def generate_diagram_from_description(
             theme=theme,
             llm_interface=handler.llm_interface,
         )
-        status_msg = Design_DrafterConfig.DIAGRAM_SUCCESS_MSG
+        status_msg = UMLBotConfig.DIAGRAM_SUCCESS_MSG
     except Exception as exc:
         LOGGER.exception("LLM-backed generation failed, returning fallback diagram.")
-        plantuml_code = Design_DrafterConfig.FALLBACK_PLANTUML_TEMPLATE.format(
+        plantuml_code = UMLBotConfig.FALLBACK_PLANTUML_TEMPLATE.format(
             diagram_type=diagram_type,
             description=description,
         )
@@ -101,6 +104,7 @@ def render_diagram_from_code(plantuml_code: str) -> Tuple[Image.Image, str, str]
 
 
 def diagram_image_to_base64(image: Image.Image | None) -> Optional[str]:
+    """Encode a PIL image to a base64 PNG string."""
     if image is None:
         return None
     buf = io.BytesIO()
@@ -110,11 +114,13 @@ def diagram_image_to_base64(image: Image.Image | None) -> Optional[str]:
 
 
 def build_plantuml_image_url(plantuml_code: str) -> str:
+    """Build a PlantUML render URL for the given diagram code."""
     encoded = _plantuml_encode(plantuml_code)
-    return Design_DrafterConfig.PLANTUML_SERVER_URL_TEMPLATE.format(encoded=encoded)
+    return UMLBotConfig.PLANTUML_SERVER_URL_TEMPLATE.format(encoded=encoded)
 
 
 def _strip_code_block_markers(text: str) -> str:
+    """Remove triple-backtick code fences from a PlantUML snippet."""
     stripped = re.sub(
         r"^```(?:plantuml)?\s*|```$",
         "",
@@ -139,6 +145,7 @@ def _fetch_plantuml_image(
     image_url: str,
     status_msg: str,
 ) -> Tuple[Image.Image | None, str]:
+    """Fetch and decode a PlantUML PNG image from the render server."""
     try:
         resp = requests.get(image_url, timeout=10)
         resp.raise_for_status()
@@ -150,7 +157,7 @@ def _fetch_plantuml_image(
     except Exception as exc:
         LOGGER.warning("PlantUML rendering failed: %s", exc)
         failure_msg = f"PlantUML rendering failed: {exc}"
-        if status_msg == Design_DrafterConfig.DIAGRAM_SUCCESS_MSG:
+        if status_msg == UMLBotConfig.DIAGRAM_SUCCESS_MSG:
             status_msg = f"Diagram generated, but rendering failed: {exc}"
         elif status_msg:
             status_msg = f"{status_msg} | {failure_msg}"
@@ -160,6 +167,7 @@ def _fetch_plantuml_image(
 
 
 def _create_placeholder_image(message: str) -> Image.Image:
+    """Create a placeholder image with a short error message."""
     image = Image.new("RGB", (400, 200), color="white")
     draw = ImageDraw.Draw(image)
     try:
@@ -171,6 +179,7 @@ def _create_placeholder_image(message: str) -> Image.Image:
 
 
 def _plantuml_encode(text: str) -> str:
+    """Encode PlantUML text for the server URL format."""
     compressor = zlib.compressobj(level=9, wbits=-15)
     compressed = compressor.compress(text.encode("utf-8")) + compressor.flush()
     b64 = base64.b64encode(compressed).decode("utf-8")

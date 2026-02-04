@@ -1,8 +1,10 @@
+"""FastAPI metadata and content-type constants for the app."""
+
 CSV_EXPECTED_TYPE = "text/csv"
 XLSX_EXPECTED_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 FORM_API_META = {
-    "title": "Design_Drafter",
+    "title": "UMLBot",
     "description": "An app to allow creation and refinement of UML diagrams fromo plain language text with generative AI and plantUML",
     "summary": "Brought to you by the Anesthesiology Research, Informatics, and Data Science teams in collaboration with Radiology Imaging Informatics, Clinicians, and Researchers.",
     "version": "0.0.1",
@@ -32,5 +34,5 @@ EXAMPLE_META = {
         },
         415: {"description": "Unsupported file type. Only CSV and Excel files are accepted."},
     },
-    "operation_id": "Design_Drafter",
+    "operation_id": "UMLBot",
 }

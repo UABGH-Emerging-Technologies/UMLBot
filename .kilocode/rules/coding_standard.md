@@ -7,8 +7,8 @@
 - Target Python ≥ 3.11; always annotate types.
 - Keep functions small, pure, and idempotent when possible.
 - Organize code:
-  - `Design_Drafter/` main package & sub-packages
-  - `Design_Drafter/config/` configuration files (i.e. all hard coded variables)
+  - `UMLBot/` main package & sub-packages
+  - `UMLBot/config/` configuration files (i.e. all hard coded variables)
   - `tests/` pytest suite
   - `docs/` MkDocs material
   - `docs/PlantUML/` PlantUML sources

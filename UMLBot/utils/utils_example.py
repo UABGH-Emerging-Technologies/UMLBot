@@ -1,3 +1,5 @@
+"""Example utility functions for UI workflows."""
+
 import pandas as pd
 
 

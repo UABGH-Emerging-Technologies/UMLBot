@@ -5,8 +5,8 @@ Covers prompt construction, LLM invocation, and error handling.
 
 import pytest
 from unittest.mock import Mock, patch
-from uml_draft_handler import UMLDraftHandler
-from config.config import Design_DrafterConfig
+from UMLBot.uml_draft_handler import UMLDraftHandler
+from UMLBot.config.config import UMLBotConfig
 
 
 class DummyPrompt:
@@ -19,7 +19,7 @@ class DummyPrompt:
 
 
 def test_construct_prompt_appends_context(monkeypatch):
-    handler = UMLDraftHandler(config=Design_DrafterConfig())
+    handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
     prompt = handler.construct_prompt("class", "A system", "bluegray")
     assert "Diagram: class" in prompt
@@ -28,7 +28,7 @@ def test_construct_prompt_appends_context(monkeypatch):
 
 
 def test_process_invokes_llm_and_returns_diagram(monkeypatch):
-    handler = UMLDraftHandler(config=Design_DrafterConfig())
+    handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
     mock_llm = Mock()
     mock_llm.invoke.return_value = "@startuml\nclass Foo\n@enduml"
@@ -39,9 +39,9 @@ def test_process_invokes_llm_and_returns_diagram(monkeypatch):
 
 
 def test_process_raises_on_missing_llm(monkeypatch):
-    handler = UMLDraftHandler(config=Design_DrafterConfig())
+    handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
-    from Design_Drafter.uml_draft_handler import UMLRetryManager
+    from UMLBot.uml_draft_handler import UMLRetryManager
 
     with pytest.raises(RuntimeError):
         handler.process(
@@ -54,14 +54,14 @@ def test_process_raises_on_missing_llm(monkeypatch):
 
 
 def test_process_retries_and_surfaces_error(monkeypatch):
-    handler = UMLDraftHandler(config=Design_DrafterConfig())
+    handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
 
     class AlwaysFailLLM:
         def invoke(self, prompt):
             raise Exception("LLM always fails")
 
-    from Design_Drafter.uml_draft_handler import UMLRetryManager
+    from UMLBot.uml_draft_handler import UMLRetryManager
 
     retry_manager = UMLRetryManager(max_retries=3)
     with pytest.raises(RuntimeError) as excinfo:
@@ -77,7 +77,7 @@ def test_process_retries_and_surfaces_error(monkeypatch):
 
 
 def test_validate_prompt_template_missing_required(monkeypatch):
-    handler = UMLDraftHandler(config=Design_DrafterConfig())
+    handler = UMLDraftHandler(config=UMLBotConfig())
     # Missing 'diagram_type' and 'description'
     bad_template = "Generate a {theme} diagram"
     with pytest.raises(ValueError):
@@ -85,7 +85,7 @@ def test_validate_prompt_template_missing_required(monkeypatch):
 
 
 def test_validate_prompt_template_malformed(monkeypatch):
-    handler = UMLDraftHandler(config=Design_DrafterConfig())
+    handler = UMLDraftHandler(config=UMLBotConfig())
     # Malformed Python placeholder
     bad_template = "Generate a {123bad} diagram for: {description}"
     with pytest.raises(ValueError):
@@ -93,7 +93,7 @@ def test_validate_prompt_template_malformed(monkeypatch):
 
 
 def test_construct_prompt_escapes_curly_braces(monkeypatch):
-    handler = UMLDraftHandler(config=Design_DrafterConfig())
+    handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
     plantuml_block = "@startuml\nskinparam {\n  BackgroundColor #EEEBDC\n}\n@enduml"
     prompt = handler.construct_prompt("class", plantuml_block, "bluegray")

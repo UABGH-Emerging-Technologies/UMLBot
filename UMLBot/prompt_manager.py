@@ -1,7 +1,10 @@
+"""Prompt template loading and rendering utilities."""
+
 from pathlib import Path
 from typing import Any, Dict
 
-from Design_Drafter.exceptions import TemplateError
+from UMLBot.exceptions import TemplateError
+
 
 class PromptManager:
     """Manages prompt templates for diagram generation.
@@ -16,6 +19,7 @@ class PromptManager:
     REQUIRED_PLACEHOLDERS = {"diagram_type", "description"}
 
     def __init__(self, template_path: Path) -> None:
+        """Initialize the prompt manager with a template path."""
         self.template_path = template_path
         self._template: str | None = None
 
