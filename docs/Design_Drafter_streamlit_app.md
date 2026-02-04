@@ -1,6 +1,6 @@
 # UML Diagram Rendering & Chat-Based Revision Workflow
 
-This section describes the end-to-end workflow for rendering and revising UML diagrams in the Gradio-based Design Drafter UI, including chat-based iterative refinement, PlantUML code generation, encoding, server communication, image rendering, and error handling.
+This section describes the end-to-end workflow for rendering and revising UML diagrams in the Gradio-based UMLBot UI, including chat-based iterative refinement, PlantUML code generation, encoding, server communication, image rendering, and error handling.
 
 ---
 

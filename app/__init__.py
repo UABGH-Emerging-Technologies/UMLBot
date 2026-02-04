@@ -1,1 +1,1 @@
-"""Application package for the Design Drafter API."""
+"""Application package for the UMLBot API."""

@@ -1,0 +1,1 @@
+::: UMLBot.diagram_generator

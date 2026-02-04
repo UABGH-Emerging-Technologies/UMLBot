@@ -1,4 +1,4 @@
-"""Application configuration for Design Drafter."""
+"""Application configuration for UMLBot."""
 
 import logging
 import logging.config
@@ -9,7 +9,7 @@ from aiweb_common.WorkflowHandler import manage_sensitive
 
 class UMLBotConfig:
     """
-    Configuration class for Design Drafter.
+    Configuration class for UMLBot.
 
     Sensitive values (e.g., LLM_API_KEY) are retrieved using manage_sensitive for secure handling.
     If the secret is not found, a default value is used.

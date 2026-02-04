@@ -7,7 +7,7 @@
 		"context": "..",
 		"args": { 
 			"PROJECT_NAME": "UMLBot",
-            "PYTHON": "3.10.5",
+            "PYTHON": "3.11",
             "USERNAME": "vscode",
 			"NODE_VERSION": "18" // Node.js is required for npm and frontend builds. Set to LTS version.
 		}
@@ -22,7 +22,7 @@
 	  ],
 
 	//mlflow port
-	"forwardingPorts":[5000],
+	"forwardPorts":[5000, 8000],
 	
 	// Set *default* container specific settings.json values on container create.
 	"settings": { 

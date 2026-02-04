@@ -2,7 +2,7 @@
 
 **UI Layer**
 - Gradio UI: Handles user input, diagram type selection, preview, and download.
-  - Code: `GradioInterface` (to be implemented in the main app, e.g., [`UMLBot_streamlit_app.py`](UMLBot_streamlit_app.py:1) or a new UI module)
+  - Code: `GradioInterface` (to be implemented in the main app, e.g., [`UMLBot_streamlit_app.md`](UMLBot_streamlit_app.md) or a new UI module)
   - Interacts with: `ChatBotService` (service layer)
 
 **Service Layer**

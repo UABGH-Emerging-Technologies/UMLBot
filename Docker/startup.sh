@@ -1,6 +1,7 @@
 #!/bin/bash
 # Install uv globally first (Python package manager)
 curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 
 # Ensure Python venv is created (idempotent)
 if [ ! -d "/workspaces/UMLBot/.venv" ]; then

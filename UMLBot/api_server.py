@@ -1,4 +1,4 @@
-"""FastAPI app factory for the Design Drafter HTTP API."""
+"""FastAPI app factory for the UMLBot HTTP API."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def create_api_app(
     if generate_fn is None:
         generate_fn = generate_diagram_from_description
 
-    api_app = FastAPI(title="Design Drafter HTTP API")
+    api_app = FastAPI(title="UMLBot HTTP API")
     api_app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],  # TODO: tighten in production

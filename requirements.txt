@@ -1,6 +1,8 @@
 mlflow >= 3.4
 mkdocs
 mkdocs-material
+mkdocs-monorepo-plugin
+mkdocstrings[python]
 rich
 black
 flake8

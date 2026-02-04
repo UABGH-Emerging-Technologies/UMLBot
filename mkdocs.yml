@@ -5,11 +5,24 @@ repo_url: https://github.com/uabperiopai
 nav:
   - Home: index.md
   - 'UMLBot':
-    - Streamlit Interface: 'UMLBot/sample_handler.md'
+    - Package Init: 'UMLBot/__init__.md'
+    - API Server: 'UMLBot/api_server.md'
+    - Diagram Generator: 'UMLBot/diagram_generator.md'
+    - Exceptions: 'UMLBot/exceptions.md'
+    - LLM Interface: 'UMLBot/llm_interface.md'
+    - Prompt Manager: 'UMLBot/prompt_manager.md'
+    - Retry Policy: 'UMLBot/retry_policy.md'
+    - UML Draft Handler: 'UMLBot/uml_draft_handler.md'
+    - Services:
+      - Init: 'UMLBot/services/__init__.md'
+      - Diagram Service: 'UMLBot/services/diagram_service.md'
+    - Utils:
+      - PlantUML Extractor: 'UMLBot/utils/plantuml_extractor.md'
+      - Utils Example: 'UMLBot/utils/utils_example.md'
+    - Config:
+      - Init: 'UMLBot/config/__init__.md'
+      - Config: 'UMLBot/config/config.md'
     - User Interface: 'UMLBot_streamlit_app.md'
-    - Example: 'UMLBot/utils/utils_example.md'
-  - 'UMLBot/config':
-    - Config: 'UMLBot/config/config.md'
 
   - llm_utils: '!include ./llm_utils/mkdocs.yml'
 

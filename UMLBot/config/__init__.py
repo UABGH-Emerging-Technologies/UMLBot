@@ -1,3 +1,3 @@
-"""Configuration exports for Design Drafter."""
+"""Configuration exports for UMLBot."""
 
 from .config import *

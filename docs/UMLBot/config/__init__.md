@@ -1,0 +1,1 @@
+::: UMLBot.config

@@ -43,8 +43,8 @@ test:
 # Docs
 .PHONY: docs
 docs:
-	mkdocs build
-	mkdocs serve
+	.venv/bin/mkdocs build
+	.venv/bin/mkdocs serve -a 0.0.0.0:8000
 	
 # Cleaning
 .PHONY: clean

@@ -1,1 +1,1 @@
-"""Repository root package marker for Design Drafter."""
+"""Repository root package marker for UMLBot."""

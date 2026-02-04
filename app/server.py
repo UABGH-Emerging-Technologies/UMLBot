@@ -1,4 +1,4 @@
-"""FastAPI server entrypoint for the Design Drafter app."""
+"""FastAPI server entrypoint for the UMLBot app."""
 
 import uvicorn
 from aiweb_common.fastapi.helper_apis import router as utils_router

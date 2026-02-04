@@ -1,2 +1,2 @@
-"""Design Drafter core package."""
+"""UMLBot core package."""
 

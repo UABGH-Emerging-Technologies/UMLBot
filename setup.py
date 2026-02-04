@@ -1,4 +1,4 @@
-"""Packaging configuration for Design Drafter."""
+"""Packaging configuration for UMLBot."""
 
 from pathlib import Path
 
@@ -18,7 +18,7 @@ with open(requirements_path, encoding="utf8") as file:
         else:
             required_packages.append(ln)
 
-docs_packages = ["mkdocs", "mkdocstrings"]
+docs_packages = ["mkdocs", "mkdocs-monorepo-plugin", "mkdocstrings[python]"]
 
 style_packages = ["black", "flake8", "isort"]
 
