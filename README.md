@@ -1,6 +1,7 @@
 # UMLBot
+<img width="256" height="256" alt="umlbot" align="right" src="https://github.com/user-attachments/assets/f49dc59a-6862-4765-988b-61c6d752b2cf" />
 
-UMLBot is an interactive tool for generating, revising, and validating UML diagrams using a chat-based workflow powered by LLMs. The system supports iterative UML refinement, automatic error correction, and transparent error reporting, all accessible through a conversational interface.
+UMLBot is an interactive tool for generating, revising, and validating UML diagrams using a chat-based workflow powered by LLMs. The system supports iterative UML refinement, automatic error correction, and transparent error reporting, all accessible through a conversational interface. This code is release in conjuction with publication submission to SoftwareX. 
 
 ## Features
 
