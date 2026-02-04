@@ -71,7 +71,7 @@ The VS Code devcontainer/Docker flow will automatically spin up both the Gradio 
    - Use the chat interface to request changes, corrections, or ask questions (e.g., "Add a new class", "Fix the association", "Why did this error occur?").
    - The system will update the diagram and code, handling errors and providing feedback as needed.
 4. **Error Handling:**  
-   - If an error occurs (e.g., invalid UML, rendering failure), the error handler will display a clear message and attempt auto-correction.
+   - If an error occurs (e.g., invalid UML, rendering failure), the error handler will display a clear message. Refreshing and trying again is usually a sufficient fix. 
    - All status updates and errors are shown in the UI for transparency.
 
 ### 4. Documentation
