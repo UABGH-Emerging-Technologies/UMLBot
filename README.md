@@ -1,6 +1,7 @@
 # UMLBot
+<img width="256" height="256" alt="umlbot" align="right" src="https://github.com/user-attachments/assets/f49dc59a-6862-4765-988b-61c6d752b2cf" />
 
-UMLBot is an interactive tool for generating, revising, and validating UML diagrams using a chat-based workflow powered by LLMs. The system supports iterative UML refinement, automatic error correction, and transparent error reporting, all accessible through a conversational interface.
+UMLBot is an interactive tool for generating, revising, and validating UML diagrams using a chat-based workflow powered by LLMs. The system supports iterative UML refinement, automatic error correction, and transparent error reporting, all accessible through a conversational interface. This code is release in conjuction with publication submission to SoftwareX. 
 
 ## Features
 
@@ -43,12 +44,6 @@ Start the Gradio/LLM backend:
 uvicorn gradio_app:app --reload
 ```
 
-Or, if you prefer Streamlit:
-
-```bash
-python app/streamlit_app.py
-```
-
 Launch the TypeScript/Next.js frontend (now located at `app/frontend`):
 
 ```bash
@@ -70,7 +65,7 @@ The VS Code devcontainer/Docker flow will automatically spin up both the Gradio 
    - Use the chat interface to request changes, corrections, or ask questions (e.g., "Add a new class", "Fix the association", "Why did this error occur?").
    - The system will update the diagram and code, handling errors and providing feedback as needed.
 4. **Error Handling:**  
-   - If an error occurs (e.g., invalid UML, rendering failure), the error handler will display a clear message and attempt auto-correction.
+   - If an error occurs (e.g., invalid UML, rendering failure), the error handler will display a clear message. Refreshing and trying again is usually a sufficient fix. 
    - All status updates and errors are shown in the UI for transparency.
 
 ### 4. Documentation
