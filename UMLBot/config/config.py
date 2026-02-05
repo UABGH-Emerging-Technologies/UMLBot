@@ -2,8 +2,9 @@
 
 import logging
 import logging.config
-import sys
+import os
 from pathlib import Path
+
 from aiweb_common.WorkflowHandler import manage_sensitive
 
 
@@ -35,7 +36,7 @@ class UMLBotConfig:
     LOGS_DIR = Path(BASE_DIR, "logs")
 
     # Data Directories
-    DATA_DIR = Path("/data/DATASCI")
+    DATA_DIR = Path(os.getenv("UMLBOT_DATA_DIR", "/data"))
     RAW_DATA = Path(DATA_DIR, "raw")
     INTERMEDIATE_DIR = Path(DATA_DIR, "intermediate")
     RESULTS_DIR = Path(DATA_DIR, "results")
@@ -64,15 +65,24 @@ class UMLBotConfig:
     FALLBACK_PLANTUML_TEMPLATE = "@startuml\n' {diagram_type} diagram\n' {description}\n@enduml"
     API_KEY_MISSING_MSG = "OpenAI API key not found. Please ensure it is available via /run/secrets, /workspaces/*/secrets, or as an environment variable."
     DIAGRAM_SUCCESS_MSG = "Diagram generated successfully using LLM."
-    PLANTUML_SERVER_URL_TEMPLATE = "http://138.26.48.104:8080/png/{encoded}"
+    PLANTUML_SERVER_URL_TEMPLATE = os.getenv(
+        "UMLBOT_PLANTUML_SERVER_URL_TEMPLATE",
+        "http://localhost:8080/png/{encoded}",
+    )
 
     # LLM Configuration
     # For security, prefer to set LLM_API_KEY as an environment variable.
-    import os
-
-    LLM_API_KEY = manage_sensitive("azure_proxy_key")  # Replace with your default or leave blank
-    LLM_MODEL = "gpt-4o-mini"
-    LLM_API_BASE = "https://proxy-ai-anes-uabmc-awefchfueccrddhf.eastus2-01.azurewebsites.net/v1"
+    try:
+        LLM_API_KEY = manage_sensitive("azure_proxy_key")
+    except KeyError:
+        LLM_API_KEY = os.getenv("UMLBOT_LLM_API_KEY", "")
+    LLM_MODEL = os.getenv("UMLBOT_LLM_MODEL", "gpt-4o-mini")
+    LLM_API_BASE = os.getenv("UMLBOT_LLM_API_BASE", "")
+    CORS_ALLOW_ORIGINS = os.getenv("UMLBOT_CORS_ALLOW_ORIGINS", "")
+    if CORS_ALLOW_ORIGINS:
+        CORS_ALLOW_ORIGINS = [origin.strip() for origin in CORS_ALLOW_ORIGINS.split(",")]
+    else:
+        CORS_ALLOW_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
     # If using Azure, set LLM_API_BASE to your Azure endpoint and adjust model name as needed.
 
     # MLFlow model registry

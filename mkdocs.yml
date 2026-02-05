@@ -4,10 +4,11 @@ site_url: https://sites.uab.edu/periop-datascience/
 repo_url: https://github.com/uabperiopai
 nav:
   - Home: index.md
+  - Architecture: architecture.md
+  - Tests: tests/README.md
   - 'UMLBot':
     - Package Init: 'UMLBot/__init__.md'
     - API Server: 'UMLBot/api_server.md'
-    - Diagram Generator: 'UMLBot/diagram_generator.md'
     - Exceptions: 'UMLBot/exceptions.md'
     - LLM Interface: 'UMLBot/llm_interface.md'
     - Prompt Manager: 'UMLBot/prompt_manager.md'
@@ -30,14 +31,11 @@ theme:
   name: readthedocs
 plugins:
   - search
-  - monorepo:
-      submodules:
-        - path: llm_utils
-          repo_url: ''
+  - monorepo
   - mkdocstrings:
       handlers:
         python:
-          paths: ['UMLBot', 'UMLBot/config', user_interface, llm_utils]  # search packages in these folders
+          paths: ['UMLBot', 'llm_utils']  # search packages in these folders
 watch:
   - .  # reload docs for any file changes
 use_directory_urls: false

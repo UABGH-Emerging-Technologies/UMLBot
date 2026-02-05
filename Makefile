@@ -9,13 +9,16 @@ help:
     @echo "clean   : cleans all unnecessary files."
     @echo "docs    : builds documentation with mkdocs."
     @echo "docs-serve: serves the documentation locally."
+    @echo "plantuml-up   : starts local PlantUML server via docker compose."
+    @echo "plantuml-logs : tails PlantUML server logs."
+    @echo "plantuml-down : stops PlantUML server and related services."
 # Styling
 .PHONY: style
 style:
-	black . 
-	flake8 
-	python3 -m isort .
-	autopep8 --recursive --aggressive --aggressive .
+	black UMLBot app tests gradio_app.py setup.py __init__.py
+	flake8
+	python3 -m isort UMLBot app tests gradio_app.py setup.py __init__.py
+	autopep8 --recursive --aggressive --aggressive UMLBot app tests gradio_app.py setup.py __init__.py
 # Environment
 .ONESHELL:
 venv:
@@ -36,6 +39,18 @@ npm-build:
 .PHONY: npm-dev
 npm-dev:
 	cd app/frontend && npm run dev
+
+.PHONY: plantuml-up
+plantuml-up:
+	docker compose up -d plantuml
+
+.PHONY: plantuml-down
+plantuml-down:
+	docker compose down
+
+.PHONY: plantuml-logs
+plantuml-logs:
+	docker compose logs -f plantuml
 
 .PHONY: test
 test:

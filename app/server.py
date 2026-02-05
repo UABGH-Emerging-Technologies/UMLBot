@@ -1,11 +1,10 @@
 """FastAPI server entrypoint for the UMLBot app."""
 
 import uvicorn
-from aiweb_common.fastapi.helper_apis import router as utils_router
 from fastapi import FastAPI
 
 from app.fastapi_config import FORM_API_META
-from app.v01.single.example import router as v01_example_router
+from app.v01.example import router as v01_example_router
 
 
 app = FastAPI(**FORM_API_META)

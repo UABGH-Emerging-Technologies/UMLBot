@@ -14,8 +14,9 @@ import gradio as gr
 from PIL import Image, ImageDraw, ImageFont
 
 # Workaround for local llm_utils and UMLBot import
-sys.path.append(str(Path(__file__).parent.parent / "llm_utils"))
-sys.path.append(str(Path(__file__).parent.parent))
+repo_root = Path(__file__).resolve().parent
+sys.path.append(str(repo_root / "llm_utils"))
+sys.path.append(str(repo_root))
 
 from UMLBot.api_server import create_api_app
 from UMLBot.config.config import UMLBotConfig

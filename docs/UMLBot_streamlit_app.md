@@ -26,7 +26,7 @@ This section describes the end-to-end workflow for rendering and revising UML di
   The user provides a free-text description and selects a UML diagram type (and optionally a theme) in the Gradio UI.
 
 - **Prompt Construction:**  
-  The [`UMLDraftHandler`](../UMLBot/uml_draft_handler.py) loads a prompty template and fills in variables (`diagram_type`, `description`, `theme`).  
+  The [`UMLDraftHandler`](UMLBot/uml_draft_handler.md) loads a prompty template and fills in variables (`diagram_type`, `description`, `theme`).  
   - The template is validated for required placeholders.
   - If the template or variables are invalid, a `ValueError` is raised.
 
@@ -40,7 +40,7 @@ This section describes the end-to-end workflow for rendering and revising UML di
   The generated PlantUML code is URL-encoded using `urllib.parse.quote`.
 
 - **Image URL Construction:**  
-  The encoded string is inserted into a PlantUML server URL template (e.g., `http://138.26.48.104:8080/svg/{encoded}`).
+  The encoded string is inserted into a PlantUML server URL template (e.g., `http://localhost:8080/svg/{encoded}`).
 
 - **Image Fetch:**  
   The app sends an HTTP GET request to the PlantUML server to retrieve the rendered diagram image.
@@ -91,6 +91,6 @@ sequenceDiagram
 
 ## References
 
-- [app/gradio_app.py](../app/gradio_app.py)
-- [UMLBot/uml_draft_handler.py](../UMLBot/uml_draft_handler.py)
-- [assets/uml_diagram.prompty](../assets/uml_diagram.prompty)
+- app/gradio_app.py
+- UMLBot/uml_draft_handler.py
+- assets/uml_diagram.prompty

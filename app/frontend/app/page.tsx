@@ -145,16 +145,24 @@ const buildPromptDescription = ({
 export default function UMLGenerator() {
 	const [chatInput, setChatInput] = useState('')
 	const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
+	const [chatHistoryByType, setChatHistoryByType] = useState<
+		Record<string, ChatMessage[]>
+	>({})
 	const [diagramType, setDiagramType] = useState(DEFAULT_DIAGRAM_TYPE)
 	const [umlCode, setUmlCode] = useState(DIAGRAM_TEMPLATES[DEFAULT_DIAGRAM_TYPE] ?? '')
+	const [umlCodeByType, setUmlCodeByType] = useState<Record<string, string>>({
+		[DEFAULT_DIAGRAM_TYPE]: DIAGRAM_TEMPLATES[DEFAULT_DIAGRAM_TYPE] ?? '',
+	})
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isDarkMode, setIsDarkMode] = useState(false)
 	const [activeTab, setActiveTab] = useState('split')
 	const editorRef = useRef<HTMLDivElement>(null)
 	const [image, setImage] = useState('')
+	const [imageByType, setImageByType] = useState<Record<string, string>>({})
 	const [isCopied, setIsCopied] = useState(false)
 	const [errorMsg, setErrorMsg] = useState<string | null>(null)
+	const [errorByType, setErrorByType] = useState<Record<string, string | null>>({})
 	const [promptTemplate, setPromptTemplate] = useState<string | null>(null)
 
 	// Toggle dark mode
@@ -198,6 +206,7 @@ export default function UMLGenerator() {
 
 		const pendingHistory = [...chatHistory, userMessage]
 		setChatHistory(pendingHistory)
+		setChatHistoryByType(prev => ({ ...prev, [diagramType]: pendingHistory }))
 		setChatInput('')
 
 		try {
@@ -222,32 +231,47 @@ export default function UMLGenerator() {
 					umlCode
 				if (normalizedCode !== umlCode) {
 					setUmlCode(normalizedCode)
+					setUmlCodeByType(prev => ({ ...prev, [diagramType]: normalizedCode }))
 				}
 				if (result.image_base64) {
-					setImage(`data:image/png;base64,${result.image_base64}`)
+					const nextImage = `data:image/png;base64,${result.image_base64}`
+					setImage(nextImage)
+					setImageByType(prev => ({ ...prev, [diagramType]: nextImage }))
 				} else if (result.image_url) {
 					setImage(result.image_url)
+					setImageByType(prev => ({ ...prev, [diagramType]: result.image_url }))
 				} else {
 					setImage('')
+					setImageByType(prev => ({ ...prev, [diagramType]: '' }))
 				}
 				setIsRefreshing(false)
-				setChatHistory(prev => [
-					...prev,
-					{
-						id: createMessageId(),
-						role: 'assistant',
-						content: result.message || 'Diagram updated. Share your next change request!',
-					},
-				])
+				setChatHistory(prev => {
+					const nextHistory = [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'assistant',
+							content: result.message || 'Diagram updated. Share your next change request!',
+						},
+					]
+					setChatHistoryByType(current => ({ ...current, [diagramType]: nextHistory }))
+					return nextHistory
+				})
+				setErrorByType(prev => ({ ...prev, [diagramType]: null }))
 				setErrorMsg(null)
 			} else {
 				const failureMsg = result.message || 'Failed to generate UML diagram'
 				setErrorMsg(failureMsg)
+				setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
 				setIsRefreshing(false)
-				setChatHistory(prev => [
-					...prev,
-					{ id: createMessageId(), role: 'error', content: failureMsg },
-				])
+				setChatHistory(prev => {
+					const nextHistory = [
+						...prev,
+						{ id: createMessageId(), role: 'error', content: failureMsg },
+					]
+					setChatHistoryByType(current => ({ ...current, [diagramType]: nextHistory }))
+					return nextHistory
+				})
 			}
 		} catch (error: unknown) {
 			console.error(error)
@@ -256,11 +280,16 @@ export default function UMLGenerator() {
 					? error.message || 'Something went wrong/Out of credits'
 					: 'Something went wrong/Out of credits'
 			setErrorMsg(message)
+			setErrorByType(prev => ({ ...prev, [diagramType]: message }))
 			setIsRefreshing(false)
-			setChatHistory(prev => [
-				...prev,
-				{ id: createMessageId(), role: 'error', content: message },
-			])
+			setChatHistory(prev => {
+				const nextHistory = [
+					...prev,
+					{ id: createMessageId(), role: 'error', content: message },
+				]
+				setChatHistoryByType(current => ({ ...current, [diagramType]: nextHistory }))
+				return nextHistory
+			})
 		} finally {
 			setIsGenerating(false)
 		}
@@ -322,14 +351,22 @@ export default function UMLGenerator() {
 	}
 
 	const handleTemplateChange = (type: string) => {
+		setChatHistoryByType(prev => ({ ...prev, [diagramType]: chatHistory }))
+		setUmlCodeByType(prev => ({ ...prev, [diagramType]: umlCode }))
+		setImageByType(prev => ({ ...prev, [diagramType]: image }))
+		setErrorByType(prev => ({ ...prev, [diagramType]: errorMsg }))
+
 		setDiagramType(type)
-		const nextTemplate = DIAGRAM_TEMPLATES[type]
-		const currentTemplate = DIAGRAM_TEMPLATES[diagramType]
-		if (nextTemplate && (umlCode.trim().length === 0 || umlCode === currentTemplate)) {
-			setUmlCode(nextTemplate)
-		}
-		setImage('')
-		setIsRefreshing(true)
+		const nextHistory = chatHistoryByType[type] ?? []
+		const nextCode = umlCodeByType[type] ?? DIAGRAM_TEMPLATES[type] ?? ''
+		const nextImage = imageByType[type] ?? ''
+		const nextError = errorByType[type] ?? null
+
+		setChatHistory(nextHistory)
+		setUmlCode(nextCode)
+		setImage(nextImage)
+		setErrorMsg(nextError)
+		setIsRefreshing(false)
 	}
 
 	const handleCopy = () => {
@@ -377,14 +414,17 @@ export default function UMLGenerator() {
 			return
 		}
 		setErrorMsg(null)
+		setErrorByType(prev => ({ ...prev, [diagramType]: null }))
 		setIsRefreshing(true)
 		setImage('')
+		setImageByType(prev => ({ ...prev, [diagramType]: '' }))
 	}
 
 	const handleImageGenerate = useCallback((url: string) => {
 		setImage(url)
+		setImageByType(prev => ({ ...prev, [diagramType]: url }))
 		setIsRefreshing(false)
-	}, [])
+	}, [diagramType])
 
 	const isBusy = isGenerating || isRefreshing
 
@@ -529,6 +569,7 @@ export default function UMLGenerator() {
 											</Button>
 										</div>
 									</div>
+
 								</div>
 							</CardContent>
 						</Card>

@@ -40,6 +40,8 @@ def generate_diagram_from_description(
     try:
         api_key = UMLBotConfig.LLM_API_KEY
     except KeyError:
+        api_key = ""
+    if not api_key or not UMLBotConfig.LLM_API_BASE:
         return DiagramGenerationResult(
             plantuml_code="",
             pil_image=None,
@@ -150,7 +152,7 @@ def _fetch_plantuml_image(
         resp = requests.get(image_url, timeout=10)
         resp.raise_for_status()
         content_type = resp.headers.get("Content-Type", "")
-        if content_type != "image/png":
+        if not content_type.startswith("image/png"):
             status_msg += f" | PlantUML server error: Unexpected content-type '{content_type}'."
             return None, status_msg
         return Image.open(io.BytesIO(resp.content)), status_msg

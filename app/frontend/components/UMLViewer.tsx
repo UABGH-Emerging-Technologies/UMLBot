@@ -15,6 +15,11 @@ type UMLViewerProps = {
 
 const UMLViewer = ({ umlCode, isGenerating, imageUrl, onImageGenerate }: UMLViewerProps) => {
 	const [generatedImage, setGeneratedImage] = useState('')
+	const plantUMLServerBase =
+		process.env.NEXT_PUBLIC_PLANTUML_SERVER_BASE ?? 'http://localhost:8080/svg/'
+	const plantUMLServer = plantUMLServerBase.endsWith('/')
+		? plantUMLServerBase
+		: `${plantUMLServerBase}/`
 
 	useEffect(() => {
 		async function generateUML() {
@@ -23,14 +28,13 @@ const UMLViewer = ({ umlCode, isGenerating, imageUrl, onImageGenerate }: UMLView
 			}
 
 			const encodedUML = plantumlEncoder.encode(umlCode)
-			const plantUMLServer = 'http://138.26.48.104:8080/svg/'
 			const url = plantUMLServer + encodedUML
 			setGeneratedImage(url)
 			onImageGenerate?.(url)
 		}
 
 		generateUML()
-	}, [imageUrl, onImageGenerate, umlCode])
+	}, [imageUrl, onImageGenerate, plantUMLServer, umlCode])
 
 	const previewSrc = imageUrl || generatedImage
 

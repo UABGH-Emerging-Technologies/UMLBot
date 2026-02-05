@@ -36,7 +36,43 @@ For development:
 python3 -m pip install -e ".[dev]"
 ```
 
-### 2. Running the Apps
+### 2. Configuration (LLM + PlantUML)
+
+Copy the example environment files and set your own values:
+
+```bash
+cp .env.example .env
+cp app/frontend/.env.local.example app/frontend/.env.local
+```
+
+Set your LLM endpoint and key in `.env`:
+
+- `UMLBOT_LLM_API_BASE` (OpenAI-compatible base URL)
+- `UMLBOT_LLM_API_KEY`
+- `UMLBOT_LLM_MODEL` (optional; default is `gpt-4o-mini`)
+
+Start a local PlantUML render server (recommended) from the repo root:
+
+```bash
+docker compose up -d plantuml
+```
+
+Or use the make targets:
+
+```bash
+make plantuml-up
+make plantuml-logs
+make plantuml-down
+```
+
+Defaults point at the local server:
+
+- Backend: `UMLBOT_PLANTUML_SERVER_URL_TEMPLATE=http://localhost:8080/png/{encoded}`
+- Frontend: `NEXT_PUBLIC_PLANTUML_SERVER_BASE=http://localhost:8080/svg/`
+
+If you prefer a hosted PlantUML server, update those values.
+
+### 3. Running the Apps
 
 Start the Gradio/LLM backend:
 
@@ -54,7 +90,7 @@ NEXT_PUBLIC_GRADIO_API_BASE=http://localhost:7860 npm run dev
 
 The VS Code devcontainer/Docker flow will automatically spin up both the Gradio API (port 7860) and the production Next.js server (port 3000).
 
-### 3. Chat-Based UML Revision Workflow
+### 4. Chat-Based UML Revision Workflow
 
 1. **Describe your system:**  
    Enter a free-text description of the system or process you want to model.
@@ -68,7 +104,7 @@ The VS Code devcontainer/Docker flow will automatically spin up both the Gradio 
    - If an error occurs (e.g., invalid UML, rendering failure), the error handler will display a clear message. Refreshing and trying again is usually a sufficient fix. 
    - All status updates and errors are shown in the UI for transparency.
 
-### 4. Documentation
+### 5. Documentation
 
 - [Architecture Overview](docs/architecture.md)
 - [UML Rendering & Error Handling Workflow](docs/UMLBot_streamlit_app.md)

@@ -5,7 +5,7 @@ model:
   api: chat
   configuration:
     type: azure_openai
-    azure_endpoint: https://proxy-ai-anes-uabmc-awefchfueccrddhf.eastus2-01.azurewebsites.net/v1
+    azure_endpoint: ${UMLBOT_LLM_API_BASE}
   parameters:
     max_tokens: 3000
     temperature: 0.1

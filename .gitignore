@@ -149,7 +149,9 @@ venv.bak/
 /.env
 
 # Ignore secrets directories or files if any
-/secrets
+/secrets/*
+!/secrets/.gitkeep
+!/secrets/README.md
 
 # Optional: ignore temporary or build files
 *.log

@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 
 from collections.abc import Callable
-
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from UMLBot.config.config import UMLBotConfig
 from UMLBot.services import (
     DiagramGenerationResult,
     diagram_image_to_base64,
@@ -27,7 +27,7 @@ def create_api_app(
     api_app = FastAPI(title="UMLBot HTTP API")
     api_app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # TODO: tighten in production
+        allow_origins=UMLBotConfig.CORS_ALLOW_ORIGINS,
         allow_methods=["POST", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "Accept"],
     )
@@ -68,11 +68,11 @@ def create_api_app(
                 "image_url": result.image_url,
                 "message": result.status_message,
             }
-        except Exception as exc:
+        except Exception:
             logging.exception("Unhandled exception in /api/generate")
             return JSONResponse(
                 status_code=500,
-                content={"status": "error", "message": f"Exception: {exc}"},
+                content={"status": "error", "message": "Internal server error"},
             )
 
     return api_app

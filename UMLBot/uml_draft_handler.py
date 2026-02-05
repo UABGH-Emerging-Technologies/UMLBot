@@ -43,6 +43,7 @@ class UMLRetryManager:
         return "\n".join(f"Attempt {i+1}: {msg}" for i, msg in enumerate(self.errors))
 
 
+import logging
 from pathlib import Path
 from typing import Optional, Any
 
@@ -75,7 +76,9 @@ class UMLDraftHandler(WorkflowHandler):
     def __init__(self, config: Optional[UMLBotConfig] = None):
         """Initialize the handler with optional configuration overrides."""
         super().__init__()
-        self.prompty_path = Path("assets/uml_diagram.prompty")
+        self.prompty_path = (
+            Path(__file__).resolve().parent.parent / "assets" / "uml_diagram.prompty"
+        )
         self.config = config or UMLBotConfig()
 
     def _validate_prompt_template(self, template: str) -> None:
@@ -197,7 +200,7 @@ class UMLDraftHandler(WorkflowHandler):
         diagram_type: str,
         description: str,
         theme: Optional[str] = None,
-        llm_interface=None,
+        llm_interface: Optional[Any] = None,
         retry_manager: Optional["UMLRetryManager"] = None,
     ) -> str:
         """
@@ -245,8 +248,8 @@ class UMLDraftHandler(WorkflowHandler):
                 return diagram_code
             except Exception as exc:
                 retry_manager.record_error(exc)
-                print(
-                    f"ERROR: UML diagram generation failed (attempt {retry_manager.attempt}):", exc
+                logging.exception(
+                    "UML diagram generation failed (attempt %s)", retry_manager.attempt
                 )
         # After max retries, raise with error context
         error_msg = (

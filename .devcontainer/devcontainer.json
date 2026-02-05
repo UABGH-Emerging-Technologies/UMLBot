@@ -18,7 +18,7 @@
 
 	// change for the specific project
 	"mounts": [
-		"source=/mnt/p/Secrets,target=/workspaces/UMLBot/secrets,readonly,type=bind"  // Mount secrets
+		"source=./data,target=/data,type=bind,consistency=cached"
 	  ],
 
 	//mlflow port
