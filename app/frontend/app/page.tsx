@@ -238,22 +238,21 @@ export default function UMLGenerator() {
 					setImage(nextImage)
 					setImageByType(prev => ({ ...prev, [diagramType]: nextImage }))
 				} else if (result.image_url) {
-					setImage(result.image_url)
-					setImageByType(prev => ({ ...prev, [diagramType]: result.image_url }))
+					const nextImageUrl = result.image_url ?? ''
+					setImage(nextImageUrl)
+					setImageByType(prev => ({ ...prev, [diagramType]: nextImageUrl }))
 				} else {
 					setImage('')
 					setImageByType(prev => ({ ...prev, [diagramType]: '' }))
 				}
 				setIsRefreshing(false)
 				setChatHistory(prev => {
-					const nextHistory = [
-						...prev,
-						{
-							id: createMessageId(),
-							role: 'assistant',
-							content: result.message || 'Diagram updated. Share your next change request!',
-						},
-					]
+					const assistantMessage: ChatMessage = {
+						id: createMessageId(),
+						role: 'assistant',
+						content: result.message || 'Diagram updated. Share your next change request!',
+					}
+					const nextHistory = [...prev, assistantMessage]
 					setChatHistoryByType(current => ({ ...current, [diagramType]: nextHistory }))
 					return nextHistory
 				})
@@ -265,10 +264,12 @@ export default function UMLGenerator() {
 				setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
 				setIsRefreshing(false)
 				setChatHistory(prev => {
-					const nextHistory = [
-						...prev,
-						{ id: createMessageId(), role: 'error', content: failureMsg },
-					]
+					const errorMessage: ChatMessage = {
+						id: createMessageId(),
+						role: 'error',
+						content: failureMsg,
+					}
+					const nextHistory = [...prev, errorMessage]
 					setChatHistoryByType(current => ({ ...current, [diagramType]: nextHistory }))
 					return nextHistory
 				})
@@ -283,10 +284,12 @@ export default function UMLGenerator() {
 			setErrorByType(prev => ({ ...prev, [diagramType]: message }))
 			setIsRefreshing(false)
 			setChatHistory(prev => {
-				const nextHistory = [
-					...prev,
-					{ id: createMessageId(), role: 'error', content: message },
-				]
+				const errorMessage: ChatMessage = {
+					id: createMessageId(),
+					role: 'error',
+					content: message,
+				}
+				const nextHistory = [...prev, errorMessage]
 				setChatHistoryByType(current => ({ ...current, [diagramType]: nextHistory }))
 				return nextHistory
 			})
