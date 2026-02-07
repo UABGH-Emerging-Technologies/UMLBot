@@ -5,7 +5,7 @@
   - If functionality is useful to many projects, propose adding it to `llm_utils` (never edit it directly).
 - Use `aiweb_common` classes/methods for LLM calls.
 - Target Python ≥ 3.11; always annotate types.
-- Keep functions small, pure, and idempotent when possible.
+- Keep functions small, pure, and independent when possible.
 - Organize code:
   - `UMLBot/` main package & sub-packages
   - `UMLBot/config/` configuration files (i.e. all hard coded variables)

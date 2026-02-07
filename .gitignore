@@ -1,7 +1,11 @@
+#Hide the typescript stuff
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class
+
+#Node stuff
+app/frontend/node_modules/
 
 # C extensions
 *.so
