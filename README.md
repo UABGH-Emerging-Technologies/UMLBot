@@ -91,6 +91,8 @@ Then open:
 
 The compose file wires the backend to the internal PlantUML service name
 (`http://plantuml:8080`) and keeps backend/PlantUML internal to the Docker network.
+The frontend proxies API calls to the backend using `GRADIO_API_BASE` (defaults to
+`http://backend:7860` inside Docker).
 
 ### 4. Docker Devcontainer Setup (Recommended)
 
