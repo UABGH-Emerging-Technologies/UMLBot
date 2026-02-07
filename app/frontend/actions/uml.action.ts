@@ -1,13 +1,8 @@
-'use server'
-
 /**
  * Calls the backend API to generate UML diagram.
  * Returns: { plantuml_code: string, image_base64: string, image_url: string, status: string, message: string }
  */
-const API_BASE_URL =
-	process.env.GRADIO_API_BASE ??
-	process.env.NEXT_PUBLIC_GRADIO_API_BASE?.replace(/\/$/, '') ??
-	'http://localhost:7860'
+const API_BASE_URL = '/api/uml'
 
 export async function generateUMLAction(
 	description: string,
@@ -22,7 +17,7 @@ export async function generateUMLAction(
 	message: string
 }> {
 	try {
-		const response = await fetch(`${API_BASE_URL}/api/generate`, {
+		const response = await fetch(`${API_BASE_URL}/generate`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -64,7 +59,7 @@ export async function renderUMLAction(
 	message: string
 }> {
 	try {
-		const response = await fetch(`${API_BASE_URL}/api/render`, {
+		const response = await fetch(`${API_BASE_URL}/render`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',

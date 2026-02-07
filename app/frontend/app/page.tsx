@@ -237,13 +237,14 @@ export default function UMLGenerator() {
 					const nextImage = `data:image/png;base64,${result.image_base64}`
 					setImage(nextImage)
 					setImageByType(prev => ({ ...prev, [diagramType]: nextImage }))
-				} else if (result.image_url) {
-					const nextImageUrl = result.image_url ?? ''
-					setImage(nextImageUrl)
-					setImageByType(prev => ({ ...prev, [diagramType]: nextImageUrl }))
+					setErrorByType(prev => ({ ...prev, [diagramType]: null }))
+					setErrorMsg(null)
 				} else {
+					const failureMsg = 'Diagram rendered without a preview image.'
 					setImage('')
 					setImageByType(prev => ({ ...prev, [diagramType]: '' }))
+					setErrorMsg(failureMsg)
+					setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
 				}
 				setIsRefreshing(false)
 				setChatHistory(prev => {
@@ -256,8 +257,6 @@ export default function UMLGenerator() {
 					setChatHistoryByType(current => ({ ...current, [diagramType]: nextHistory }))
 					return nextHistory
 				})
-				setErrorByType(prev => ({ ...prev, [diagramType]: null }))
-				setErrorMsg(null)
 			} else {
 				const failureMsg = result.message || 'Failed to generate UML diagram'
 				setErrorMsg(failureMsg)
@@ -445,16 +444,15 @@ export default function UMLGenerator() {
 						const nextImage = `data:image/png;base64,${result.image_base64}`
 						setImage(nextImage)
 						setImageByType(prev => ({ ...prev, [diagramType]: nextImage }))
-					} else if (result.image_url) {
-						const nextImageUrl = result.image_url ?? ''
-						setImage(nextImageUrl)
-						setImageByType(prev => ({ ...prev, [diagramType]: nextImageUrl }))
+						setErrorMsg(null)
+						setErrorByType(prev => ({ ...prev, [diagramType]: null }))
 					} else {
+						const failureMsg = 'Diagram rendered without a preview image.'
 						setImage('')
 						setImageByType(prev => ({ ...prev, [diagramType]: '' }))
+						setErrorMsg(failureMsg)
+						setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
 					}
-					setErrorMsg(null)
-					setErrorByType(prev => ({ ...prev, [diagramType]: null }))
 				} else {
 					const failureMsg = result.message || 'Failed to render UML diagram'
 					setErrorMsg(failureMsg)
