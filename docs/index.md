@@ -25,6 +25,7 @@ Optional:
 - `UMLBOT_LLM_MODEL` (defaults to `gpt-4o-mini`)
 - `UMLBOT_PLANTUML_SERVER_URL_TEMPLATE` (defaults to `http://localhost:8080/png/{encoded}`)
 - `UMLBOT_CORS_ALLOW_ORIGINS`
+- `NEXT_PUBLIC_PLANTUML_SERVER_URL_TEMPLATE` (frontend fallback; set to match the PlantUML server, e.g. `http://localhost:8080/svg/{encoded}`)
 
 ### Main Documentation
 

@@ -80,8 +80,6 @@ def generate_diagram_from_description(
         image_url=image_url,
         status_msg=status_msg,
     )
-    if pil_image is None:
-        image_url = ""
     return DiagramGenerationResult(
         plantuml_code=normalized_code,
         pil_image=pil_image,
@@ -118,7 +116,17 @@ def diagram_image_to_base64(image: Image.Image | None) -> Optional[str]:
 def build_plantuml_image_url(plantuml_code: str) -> str:
     """Build a PlantUML render URL for the given diagram code."""
     encoded = _plantuml_encode(plantuml_code)
-    return UMLBotConfig.PLANTUML_SERVER_URL_TEMPLATE.format(encoded=encoded)
+    return _build_plantuml_url(UMLBotConfig.PLANTUML_SERVER_URL_TEMPLATE, encoded)
+
+
+def _build_plantuml_url(template: str, encoded: str) -> str:
+    """
+    Support both full templates (with {encoded}) and base URLs.
+    """
+    if "{encoded}" in template:
+        return template.format(encoded=encoded)
+    base = template.rstrip("/")
+    return f"{base}/{encoded}"
 
 
 def _strip_code_block_markers(text: str) -> str:

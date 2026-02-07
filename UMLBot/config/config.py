@@ -8,6 +8,34 @@ from pathlib import Path
 from aiweb_common.WorkflowHandler import manage_sensitive
 
 
+def _load_env_file(path: Path) -> None:
+    """Load simple KEY=VALUE pairs from a .env file without overriding existing envs."""
+    if not path.exists():
+        return
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.lower().startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key or key in os.environ:
+            continue
+        if (value.startswith('"') and value.endswith('"')) or (
+            value.startswith("'") and value.endswith("'")
+        ):
+            value = value[1:-1]
+        os.environ[key] = value
+
+
+# Load repo-root .env for local/dev runs (do not override explicit env vars).
+_load_env_file(Path(__file__).resolve().parents[2] / ".env")
+
+
 class UMLBotConfig:
     """
     Configuration class for UMLBot.
@@ -63,12 +91,26 @@ class UMLBotConfig:
         "Convert the following description into a PlantUML {diagram_type} diagram.\n{input}"
     )
     FALLBACK_PLANTUML_TEMPLATE = "@startuml\n' {diagram_type} diagram\n' {description}\n@enduml"
-    API_KEY_MISSING_MSG = "OpenAI API key not found. Please ensure it is available via /run/secrets, /workspaces/*/secrets, or as an environment variable."
+    API_KEY_MISSING_MSG = (
+        "LLM API key or base URL not found. Please ensure UMLBOT_LLM_API_KEY and "
+        "UMLBOT_LLM_API_BASE are set (via /run/secrets, /workspaces/*/secrets, or "
+        "environment variables)."
+    )
     DIAGRAM_SUCCESS_MSG = "Diagram generated successfully using LLM."
+    _DEFAULT_PLANTUML_TEMPLATE = "http://localhost:8080/png/{encoded}"
+    _RUNNING_IN_DOCKER = Path("/.dockerenv").exists()
+    if _RUNNING_IN_DOCKER:
+        _DEFAULT_PLANTUML_TEMPLATE = "http://plantuml:8080/png/{encoded}"
     PLANTUML_SERVER_URL_TEMPLATE = os.getenv(
         "UMLBOT_PLANTUML_SERVER_URL_TEMPLATE",
-        "http://localhost:8080/png/{encoded}",
+        _DEFAULT_PLANTUML_TEMPLATE,
     )
+    if _RUNNING_IN_DOCKER and PLANTUML_SERVER_URL_TEMPLATE.startswith(
+        ("http://localhost:8080", "http://127.0.0.1:8080")
+    ):
+        PLANTUML_SERVER_URL_TEMPLATE = PLANTUML_SERVER_URL_TEMPLATE.replace(
+            "http://localhost:8080", "http://plantuml:8080"
+        ).replace("http://127.0.0.1:8080", "http://plantuml:8080")
 
     # LLM Configuration
     # For security, prefer to set LLM_API_KEY as an environment variable.

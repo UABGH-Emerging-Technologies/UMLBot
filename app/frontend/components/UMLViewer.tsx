@@ -2,41 +2,16 @@
 
 import Image from 'next/image'
 import { RefreshCw, RotateCw, ZoomIn, ZoomOut } from 'lucide-react'
-import plantumlEncoder from 'plantuml-encoder'
-import { useEffect, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 
 type UMLViewerProps = {
 	umlCode: string
 	isGenerating: boolean
 	imageUrl?: string
-	onImageGenerate?: (url: string) => void
 }
 
-const UMLViewer = ({ umlCode, isGenerating, imageUrl, onImageGenerate }: UMLViewerProps) => {
-	const [generatedImage, setGeneratedImage] = useState('')
-	const plantUMLServerBase =
-		process.env.NEXT_PUBLIC_PLANTUML_SERVER_BASE ?? 'http://localhost:8080/svg/'
-	const plantUMLServer = plantUMLServerBase.endsWith('/')
-		? plantUMLServerBase
-		: `${plantUMLServerBase}/`
-
-	useEffect(() => {
-		async function generateUML() {
-			if (!umlCode || imageUrl) {
-				return
-			}
-
-			const encodedUML = plantumlEncoder.encode(umlCode)
-			const url = plantUMLServer + encodedUML
-			setGeneratedImage(url)
-			onImageGenerate?.(url)
-		}
-
-		generateUML()
-	}, [imageUrl, onImageGenerate, plantUMLServer, umlCode])
-
-	const previewSrc = imageUrl || generatedImage
+const UMLViewer = ({ umlCode, isGenerating, imageUrl }: UMLViewerProps) => {
+	const previewSrc = imageUrl
 
 	try {
 		return (
@@ -96,7 +71,7 @@ const UMLViewer = ({ umlCode, isGenerating, imageUrl, onImageGenerate }: UMLView
 												unoptimized
 											/>
 										) : (
-											<p>No diagram available</p>
+											<p>{umlCode ? 'No preview yet' : 'No diagram available'}</p>
 										)}
 									</div>
 								</TransformComponent>

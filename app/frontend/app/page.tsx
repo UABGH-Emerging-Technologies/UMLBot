@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
@@ -38,7 +38,7 @@ import {
 } from 'lucide-react'
 
 import { DIAGRAM_TEMPLATES, DIAGRAM_TYPES, DEFAULT_DIAGRAM_TYPE } from '@/constants'
-import { generateUMLAction } from '@/actions/uml.action'
+import { generateUMLAction, renderUMLAction } from '@/actions/uml.action'
 import UMLViewer from '@/components/UMLViewer'
 
 type ChatMessage = {
@@ -312,7 +312,6 @@ export default function UMLGenerator() {
 				umlCode={umlCode}
 				isGenerating={isBusy}
 				imageUrl={image || undefined}
-				onImageGenerate={handleImageGenerate}
 			/>
 		)
 	}
@@ -385,22 +384,42 @@ export default function UMLGenerator() {
 			return
 		}
 		try {
-			// Fetch the SVG content from the PlantUML URL
-			const response = await fetch(image)
-			if (!response.ok) {
-				throw new Error('Failed to fetch the SVG content')
+			let blob: Blob
+			let extension = 'png'
+
+			if (image.startsWith('data:')) {
+				const [meta, data] = image.split(',', 2)
+				const mimeMatch = meta.match(/data:([^;]+);base64/)
+				const mimeType = mimeMatch ? mimeMatch[1] : 'image/png'
+				const binary = atob(data)
+				const bytes = new Uint8Array(binary.length)
+				for (let i = 0; i < binary.length; i += 1) {
+					bytes[i] = binary.charCodeAt(i)
+				}
+				blob = new Blob([bytes], { type: mimeType })
+				if (mimeType.includes('svg')) {
+					extension = 'svg'
+				} else if (mimeType.includes('png')) {
+					extension = 'png'
+				}
+			} else {
+				const response = await fetch(image)
+				if (!response.ok) {
+					throw new Error('Failed to fetch diagram content')
+				}
+				const contentType = response.headers.get('Content-Type') ?? ''
+				if (contentType.includes('svg')) {
+					extension = 'svg'
+				} else if (contentType.includes('png')) {
+					extension = 'png'
+				}
+				blob = await response.blob()
 			}
 
-			// Convert the response to a Blob
-			const svgBlob = await response.blob()
-
-			// Create a URL for the Blob
-			const url = URL.createObjectURL(svgBlob)
-
-			// Create a temporary anchor element to trigger the download
+			const url = URL.createObjectURL(blob)
 			const link = document.createElement('a')
 			link.href = url
-			link.download = 'uml.svg' // Set the filename for the downloaded file
+			link.download = `uml.${extension}`
 			document.body.appendChild(link) // Append the link to the DOM (required for Firefox)
 			link.click() // Trigger the download
 
@@ -419,15 +438,41 @@ export default function UMLGenerator() {
 		setErrorMsg(null)
 		setErrorByType(prev => ({ ...prev, [diagramType]: null }))
 		setIsRefreshing(true)
-		setImage('')
-		setImageByType(prev => ({ ...prev, [diagramType]: '' }))
+		renderUMLAction(umlCode)
+			.then(result => {
+				if (result.status === 'ok') {
+					if (result.image_base64) {
+						const nextImage = `data:image/png;base64,${result.image_base64}`
+						setImage(nextImage)
+						setImageByType(prev => ({ ...prev, [diagramType]: nextImage }))
+					} else if (result.image_url) {
+						const nextImageUrl = result.image_url ?? ''
+						setImage(nextImageUrl)
+						setImageByType(prev => ({ ...prev, [diagramType]: nextImageUrl }))
+					} else {
+						setImage('')
+						setImageByType(prev => ({ ...prev, [diagramType]: '' }))
+					}
+					setErrorMsg(null)
+					setErrorByType(prev => ({ ...prev, [diagramType]: null }))
+				} else {
+					const failureMsg = result.message || 'Failed to render UML diagram'
+					setErrorMsg(failureMsg)
+					setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
+				}
+			})
+			.catch(error => {
+				const message =
+					error instanceof Error
+						? error.message || 'Failed to render UML diagram'
+						: 'Failed to render UML diagram'
+				setErrorMsg(message)
+				setErrorByType(prev => ({ ...prev, [diagramType]: message }))
+			})
+			.finally(() => {
+				setIsRefreshing(false)
+			})
 	}
-
-	const handleImageGenerate = useCallback((url: string) => {
-		setImage(url)
-		setImageByType(prev => ({ ...prev, [diagramType]: url }))
-		setIsRefreshing(false)
-	}, [diagramType])
 
 	const isBusy = isGenerating || isRefreshing
 

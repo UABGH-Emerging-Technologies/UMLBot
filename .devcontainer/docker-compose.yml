@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  umlbot-dev:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        PROJECT_NAME: UMLBot
+        PYTHON: "3.11"
+        USERNAME: vscode
+        NODE_VERSION: "18"
+    volumes:
+      - ..:/workspaces/UMLBot:cached
+    command: sleep infinity
+
+  plantuml:
+    image: plantuml/plantuml-server:latest
+    container_name: umlbot-plantuml
+    restart: unless-stopped

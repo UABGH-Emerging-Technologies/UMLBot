@@ -1,0 +1,36 @@
+@startuml
+title UMLBot Docker Compose Deployment
+
+node "Docker Host" {
+  node "Compose Network" {
+    node "plantuml" as plantuml_container {
+      [PlantUML Server]
+      note right
+        Exposes :8080 (host)
+      end note
+    }
+
+    node "backend" as backend_container {
+      [Gradio + FastAPI API]
+      note right
+        Exposes :7860 (host)
+      end note
+    }
+
+    node "frontend" as frontend_container {
+      [Next.js App]
+      note right
+        Exposes :3000 (host)
+      end note
+    }
+
+    backend_container --> plantuml_container : HTTP\nhttp://plantuml:8080/png/{encoded}
+    frontend_container --> backend_container : HTTP\nhttp://backend:7860/api/generate
+  }
+}
+
+cloud "User Browser" as browser
+browser --> frontend_container : HTTP\nhttp://localhost:3000
+browser --> plantuml_container : HTTP (optional)\nhttp://localhost:8080/svg/{encoded}
+
+@enduml

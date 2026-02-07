@@ -51,6 +51,8 @@ Set your LLM endpoint and key in `.env`:
 - `UMLBOT_LLM_API_KEY`
 - `UMLBOT_LLM_MODEL` (optional; default is `gpt-4o-mini`)
 
+Example base URL for OpenAI-compatible endpoints: `https://api.openai.com/v1`
+
 Start a local PlantUML render server (recommended) from the repo root:
 
 ```bash
@@ -68,14 +70,33 @@ make plantuml-down
 Defaults point at the local server:
 
 - Backend: `UMLBOT_PLANTUML_SERVER_URL_TEMPLATE=http://localhost:8080/png/{encoded}`
-- Frontend: `NEXT_PUBLIC_PLANTUML_SERVER_BASE=http://localhost:8080/svg/`
 
 If you prefer a hosted PlantUML server, update those values.
 
-### 3. Docker Devcontainer Setup (Recommended)
+### 3. Docker Compose (Full Stack)
+
+Run the full stack (PlantUML + backend + frontend) with a single command:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Edit `.env` to set `UMLBOT_LLM_API_BASE` and `UMLBOT_LLM_API_KEY` before starting
+if you want LLM-backed generation.
+
+Then open:
+
+- Frontend: http://localhost:3000
+
+The compose file wires the backend to the internal PlantUML service name
+(`http://plantuml:8080`) and keeps backend/PlantUML internal to the Docker network.
+
+### 4. Docker Devcontainer Setup (Recommended)
 
 The devcontainer uses `.venv` and runs the startup script in `Docker/startup.sh` to
-install dependencies, build the frontend, and launch the backend/frontend.
+install dependencies, build the frontend, and launch the backend/frontend. If a `.env`
+file exists, it is loaded automatically by the startup script.
 
 1. Ensure Docker Desktop is running (WSL users should have Docker Desktop with WSL integration enabled).
 2. Open the repo in VS Code and run **Dev Containers: Reopen in Container**.
@@ -91,13 +112,36 @@ Then edit `.env` with your values:
 - `UMLBOT_LLM_API_KEY`
 - `UMLBOT_LLM_MODEL` (optional)
 
-4. (Optional) Start a local PlantUML server:
+4. PlantUML (devcontainer compose):
+
+The devcontainer compose file starts a PlantUML server on the same Docker network.
+Set the backend URL to the service name:
+
+```
+UMLBOT_PLANTUML_SERVER_URL_TEMPLATE=http://plantuml:8080/png/{encoded}
+```
+
+The frontend (browser) should still use:
+
+```
+NEXT_PUBLIC_PLANTUML_SERVER_BASE=http://localhost:8080/svg/
+```
+
+5. (Optional) Start a local PlantUML server (non-devcontainer workflows):
 
 ```bash
 make plantuml-up
 ```
 
-### 4. Running the Apps (Local)
+### 5. Running the Apps (Local)
+
+Ensure environment variables are exported before launching the backend:
+
+```bash
+set -a
+source .env
+set +a
+```
 
 Start the Gradio/LLM backend:
 
@@ -115,7 +159,7 @@ NEXT_PUBLIC_GRADIO_API_BASE=http://localhost:7860 npm run dev
 
 The VS Code devcontainer/Docker flow will automatically spin up both the Gradio API (port 7860) and the production Next.js server (port 3000).
 
-### 4. Chat-Based UML Revision Workflow
+### 6. Chat-Based UML Revision Workflow
 
 1. **Describe your system:**  
    Enter a free-text description of the system or process you want to model.

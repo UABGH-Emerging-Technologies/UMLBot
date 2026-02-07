@@ -1,0 +1,37 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# System deps for common Python packages (pyodbc, etc.)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc \
+        unixodbc-dev \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt pyproject.toml setup.py /app/
+COPY llm_utils /app/llm_utils
+COPY UMLBot /app/UMLBot
+COPY gradio_app.py /app/gradio_app.py
+COPY app /app/app
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r /app/requirements.txt \
+    && pip install --no-cache-dir -r /app/llm_utils/requirements.txt \
+    && pip install --no-cache-dir \
+        "langchain==0.3.27" \
+        "langchain-community==0.3.31" \
+        "langchain-openai==0.3.35" \
+        "langchain-prompty==0.1.2" \
+    && pip install --no-cache-dir -e /app/llm_utils \
+    && pip install --no-cache-dir -e /app \
+    && python -c "import langchain; from langchain.prompts import ChatPromptTemplate; print('langchain OK', langchain.__version__)"
+
+EXPOSE 7860
+
+CMD ["python", "gradio_app.py"]

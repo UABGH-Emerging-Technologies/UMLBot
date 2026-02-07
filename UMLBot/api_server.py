@@ -14,6 +14,7 @@ from UMLBot.services import (
     DiagramGenerationResult,
     diagram_image_to_base64,
     generate_diagram_from_description,
+    render_diagram_from_code,
 )
 
 
@@ -70,6 +71,36 @@ def create_api_app(
             }
         except Exception:
             logging.exception("Unhandled exception in /api/generate")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": "Internal server error"},
+            )
+
+    @api_app.post("/api/render")
+    async def render_endpoint(request: Request):
+        """Render a PlantUML snippet into an image for client previews."""
+        try:
+            data = await request.json()
+            plantuml_code = data.get("plantuml_code") or data.get("code")
+            if not plantuml_code:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "message": "Missing required field: plantuml_code",
+                    },
+                )
+
+            pil_image, status_msg, image_url = render_diagram_from_code(plantuml_code)
+            image_base64 = diagram_image_to_base64(pil_image)
+            return {
+                "status": "ok",
+                "image_base64": image_base64,
+                "image_url": image_url,
+                "message": status_msg,
+            }
+        except Exception:
+            logging.exception("Unhandled exception in /api/render")
             return JSONResponse(
                 status_code=500,
                 content={"status": "error", "message": "Internal server error"},

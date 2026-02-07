@@ -43,6 +43,13 @@ else
     exit 1
 fi
 
+# Load local environment variables if present
+if [ -f "/workspaces/UMLBot/.env" ]; then
+    set -a
+    source /workspaces/UMLBot/.env
+    set +a
+fi
+
 # Launch the Gradio API backend
 export NEXT_PUBLIC_GRADIO_API_BASE="http://127.0.0.1:7860"
 cd "$REPO_DIR"
