@@ -4,8 +4,7 @@ FROM mcr.microsoft.com/devcontainers/python:0-${VARIANT}
 
 ARG NODE_VERSION="none"
 
-RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | tee /usr/share/keyrings/yarn.gpg > /dev/null \
-    && echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian stable main" | tee /etc/apt/sources.list.d/yarn.list \
+RUN rm -f /etc/apt/sources.list.d/yarn.list /usr/share/keyrings/yarn.gpg \
     && apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
         sqlite3 \
@@ -20,7 +19,12 @@ RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | tee /usr
     && rm -rf /var/lib/apt/lists/*
 
 RUN if [ "${NODE_VERSION}" != "none" ]; then \
-        su vscode -c "umask 0002 && . /usr/local/share/nvm/nvm.sh && nvm install ${NODE_VERSION} 2>&1"; \
+        curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" | bash - \
+        && apt-get update \
+        && apt-get install -y --no-install-recommends nodejs \
+        && rm -rf /var/lib/apt/lists/* \
+        && node --version \
+        && npm --version; \
     fi
 
 USER vscode
