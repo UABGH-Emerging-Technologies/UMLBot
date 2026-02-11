@@ -26,5 +26,5 @@ RUN if [ "${NODE_VERSION}" != "none" ]; then \
         && node --version \
         && npm --version; \
     fi
-
+RUN apt-cache policy nodejs && which npm || true
 USER vscode

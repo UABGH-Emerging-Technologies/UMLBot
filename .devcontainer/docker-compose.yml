@@ -9,7 +9,7 @@ services:
         PROJECT_NAME: UMLBot
         PYTHON: "3.11"
         USERNAME: vscode
-        NODE_VERSION: "18"
+        NODE_VERSION: "none"
     volumes:
       - ..:/workspaces/UMLBot:cached
       - umlbot-venv:/workspaces/UMLBot/.venv
