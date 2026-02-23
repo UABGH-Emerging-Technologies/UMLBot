@@ -31,4 +31,4 @@ python-multipart
 fastapi
 ./llm_utils
 pytest
-gradio
+gradio>=5.49.1

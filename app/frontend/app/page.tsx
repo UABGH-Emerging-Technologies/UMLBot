@@ -480,7 +480,7 @@ export default function UMLGenerator() {
 				<div className="container mx-auto px-4 py-3 flex items-center justify-between">
 					<div className="flex items-center gap-2">
 						<FileCode className="h-6 w-6 text-primary" />
-						<h1 className="text-xl font-bold">Model Foundry</h1>
+						<h1 className="text-xl font-bold">UMLBot</h1>
 						<Badge variant="accent" className="ml-2 uppercase tracking-wide">
 							Alpha
 						</Badge>

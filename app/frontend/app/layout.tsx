@@ -7,31 +7,31 @@ import '@/app/globals.css'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-	title: 'Model Foundry | Create UML Diagrams Instantly',
+	title: 'UMLBot | Create UML Diagrams Instantly',
 	description:
 		'Generate UML diagrams from natural language using AI. Fast, easy, and accurate UML diagram generation by Ryan Godwin.',
 	keywords: [
 		'UML diagrams',
-		'Model Foundry',
+		'UMLBot',
 		'UML from natural language',
 		'UML tool',
-		'Model Foundry',
+		'UMLBot',
 		'Ryan Godwin',
 		'AI diagram generator',
 	],
-	authors: [{ name: 'Ryan Godwin', url: 'https://ai-preview.anes.uab.edu' }],
+	authors: [{ name: 'Ryan Godwin', url: 'https://ai-preview.anes.uab.edu'}],
 	openGraph: {
-		title: 'Model Foundry',
+		title: 'UMLBot',
 		description:
 			'Generate UML diagrams from natural language using AI. Fast and easy UML diagram generation.',
 		url: 'https://ai-preview.anes.uab.edu',
-		siteName: 'Model Foundry',
+		siteName: 'UMLBot',
 		images: [
 			{
 				url: 'https://ai-preview.anes.uab.edu/cover.png', // Add an OpenGraph image for social sharing
 				width: 1200,
 				height: 630,
-				alt: 'Model Foundry',
+				alt: 'UMLBot',
 			},
 		],
 		locale: 'en_US',
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
 	},
 	twitter: {
 		card: 'summary_large_image',
-		title: 'Model Foundry',
+		title: 'UMLBot',
 		description:
 			'Generate UML diagrams from natural language using AI. Fast, easy, and accurate UML diagram generation.',
 		images: ['https://ai-preview.anes.uab.edu/cover.png'], // Add a Twitter image for social sharing
