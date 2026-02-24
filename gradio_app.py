@@ -25,6 +25,7 @@ from UMLBot.services import DiagramService
 from UMLBot.uml_draft_handler import UMLDraftHandler
 from UMLBot.ui_mockup_draft_handler import UIMockupDraftHandler
 from UMLBot.gantt_draft_handler import GanttDraftHandler
+from UMLBot.er_draft_handler import ERDraftHandler
 from llm_utils.aiweb_common.generate.ChatResponse import ChatResponseHandler
 
 
@@ -35,7 +36,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     gr.Markdown("## UML Chat Interface")
     with gr.Row():
         output_mode_dropdown = gr.Dropdown(
-            choices=["UML Diagram", "UI Mockup (SALT)", "Gantt Chart"],
+            choices=["UML Diagram", "UI Mockup (SALT)", "Gantt Chart", "ER Diagram"],
             value="UML Diagram",
             label="Output Mode",
             interactive=True,
@@ -182,9 +183,18 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         chat_history = chat_history + [{"role": "user", "content": user_input}]
         is_ui_mockup = output_mode == "UI Mockup (SALT)"
         is_gantt = output_mode == "Gantt Chart"
-        effective_type = "salt" if is_ui_mockup else "gantt" if is_gantt else diagram_type
+        is_erd = output_mode == "ER Diagram"
+        effective_type = (
+            "salt"
+            if is_ui_mockup
+            else "gantt"
+            if is_gantt
+            else "ERD"
+            if is_erd
+            else diagram_type
+        )
         system_msg = (
-            f"{'Mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'Diagram'} type: {effective_type}\n"
+            f"{'Mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'ERD' if is_erd else 'Diagram'} type: {effective_type}\n"
             f"User request: {safe_user_input}\n"
             f"Current PlantUML code:\n"
             "```plantuml\n"
@@ -212,6 +222,8 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
             handler = UIMockupDraftHandler()
         elif is_gantt:
             handler = GanttDraftHandler()
+        elif is_erd:
+            handler = ERDraftHandler()
         else:
             handler = UMLDraftHandler()
         handler._init_openai(
@@ -237,6 +249,8 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
                     extracted_plantuml = extract_last_salt_block(raw_response)
                 elif is_gantt:
                     extracted_plantuml = extract_last_gantt_block(raw_response)
+                elif is_erd:
+                    extracted_plantuml = extract_last_plantuml_block(raw_response)
                 else:
                     extracted_plantuml = extract_last_plantuml_block(raw_response)
                 plantuml_code_text = extracted_plantuml
@@ -247,7 +261,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
                 retry_manager.record_error(e)
                 error_msg = (
                     f"Attempt {attempt}: "
-                    f"{'UI mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'UML'} "
+                    f"{'UI mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'ERD' if is_erd else 'UML'} "
                     f"rendering failed: {e}"
                 )
                 chat_history = chat_history + [{"role": "error", "content": error_msg}]

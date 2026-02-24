@@ -18,6 +18,7 @@ from UMLBot.uml_draft_handler import UMLDraftHandler
 from UMLBot.mindmap_draft_handler import MindmapDraftHandler
 from UMLBot.ui_mockup_draft_handler import UIMockupDraftHandler
 from UMLBot.gantt_draft_handler import GanttDraftHandler
+from UMLBot.er_draft_handler import ERDraftHandler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -112,6 +113,26 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_GANTT_TEMPLATE,
             failure_log="LLM-backed Gantt generation failed, returning fallback diagram.",
+        )
+
+    def generate_erd_from_description(
+        self,
+        description: str,
+        diagram_type: str = "ERD",
+        theme: Optional[str] = None,
+    ) -> DiagramGenerationResult:
+        """
+        Runs the ERDraftHandler pipeline and returns the PlantUML ER diagram code plus the rendered image.
+        Errors are converted to a fallback ER diagram stub with contextual messaging.
+        """
+        handler = ERDraftHandler()
+        return self._generate_from_description(
+            handler=handler,
+            description=description,
+            diagram_type=diagram_type,
+            theme=theme,
+            fallback_template=UMLBotConfig.FALLBACK_ERD_TEMPLATE,
+            failure_log="LLM-backed ERD generation failed, returning fallback diagram.",
         )
 
     def render_diagram_from_code(self, plantuml_code: str) -> Tuple[Image.Image, str, str]:

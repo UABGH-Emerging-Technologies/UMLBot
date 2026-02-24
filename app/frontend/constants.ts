@@ -150,3 +150,25 @@ Project starts 2026-01-01
 [Build] starts at [Design]'s end
 [QA] starts at [Build]'s end
 @endgantt`
+
+export const ERD_TEMPLATE = `@startchen
+
+entity "Customer" as CUSTOMER {
+  "customer number" as Number <<key>>
+  "member bonus" as Bonus <<derived>>
+  "first and last names" as Name <<multi>>
+}
+
+entity "Movie" as MOVIE {
+  "barcode" as Code
+}
+
+relationship "was-rented-to" as RENTED_TO {
+  "date rented" as Date
+}
+
+RENTED_TO -1- CUSTOMER
+RENTED_TO -N- MOVIE
+
+@endchen
+`

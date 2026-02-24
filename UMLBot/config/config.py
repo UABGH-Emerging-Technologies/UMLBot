@@ -100,6 +100,9 @@ class UMLBotConfig:
     FALLBACK_GANTT_TEMPLATE = (
         "@startgantt\n[Task] lasts 1 day\n@endgantt"
     )
+    FALLBACK_ERD_TEMPLATE = (
+        "@startuml\nentity \"Entity\" as E {\n  *id : int\n}\n@enduml"
+    )
     API_KEY_MISSING_MSG = (
         "LLM API key or base URL not found. Please ensure UMLBOT_LLM_API_KEY and "
         "UMLBOT_LLM_API_BASE are set (via /run/secrets, /workspaces/*/secrets, or "

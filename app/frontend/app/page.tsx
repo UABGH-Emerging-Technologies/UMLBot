@@ -44,11 +44,13 @@ import {
 	MINDMAP_TEMPLATE,
 	UI_MOCKUP_TEMPLATE,
 	GANTT_TEMPLATE,
+	ERD_TEMPLATE,
 } from '@/constants'
 import { generateUMLAction, renderUMLAction } from '@/actions/uml.action'
 import { generateMindmapAction, renderMindmapAction } from '@/actions/mindmap.action'
 import { generateUIMockupAction, renderUIMockupAction } from '@/actions/ui_mockup.action'
 import { generateGanttAction, renderGanttAction } from '@/actions/gantt.action'
+import { generateERDAction, renderERDAction } from '@/actions/erd.action'
 import UMLViewer from '@/components/UMLViewer'
 
 type ChatMessage = {
@@ -57,7 +59,7 @@ type ChatMessage = {
 	content: string
 }
 
-type DiagramMode = 'uml' | 'mindmap' | 'ui-mockup' | 'gantt'
+type DiagramMode = 'uml' | 'mindmap' | 'ui-mockup' | 'gantt' | 'erd'
 
 const createMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const MAX_HISTORY_MESSAGES = 10
@@ -140,6 +142,7 @@ const buildPromptDescription = ({
 	const isMindmap = mode === 'mindmap'
 	const isUIMockup = mode === 'ui-mockup'
 	const isGantt = mode === 'gantt'
+	const isERD = mode === 'erd'
 	const outputFence = isMindmap
 		? '@startmindmap and @endmindmap'
 		: isUIMockup
@@ -153,14 +156,18 @@ const buildPromptDescription = ({
 			? 'Existing PlantUML SALT mockup (reuse and refine rather than restart):'
 			: isGantt
 				? 'Existing PlantUML Gantt chart (reuse and refine rather than restart):'
-				: 'Existing PlantUML (reuse and refine rather than restart):'
+				: isERD
+					? 'Existing PlantUML ER diagram (reuse and refine rather than restart):'
+					: 'Existing PlantUML (reuse and refine rather than restart):'
 	const emptyLabel = isMindmap
 		? 'No mindmap has been created yet. Create a fresh PlantUML mindmap.'
 		: isUIMockup
 			? 'No UI mockup has been created yet. Create a fresh PlantUML SALT mockup.'
 			: isGantt
 				? 'No Gantt chart has been created yet. Create a fresh PlantUML Gantt chart.'
-				: 'No diagram has been created yet. Create a fresh PlantUML diagram.'
+				: isERD
+					? 'No ER diagram has been created yet. Create a fresh PlantUML ER diagram.'
+					: 'No diagram has been created yet. Create a fresh PlantUML diagram.'
 	const descriptionSections = [
 		`Latest user request:\n${latestRequest}`,
 		currentCode ? `${codeLabel}\n${currentCode}` : emptyLabel,
@@ -179,7 +186,7 @@ const buildPromptDescription = ({
 	}
 
 	return [
-		`You are an expert ${isMindmap ? 'mindmap' : isUIMockup ? 'UI mockup' : isGantt ? 'Gantt' : 'UML'} assistant following the prompty template rules.`,
+		`You are an expert ${isMindmap ? 'mindmap' : isUIMockup ? 'UI mockup' : isGantt ? 'Gantt' : isERD ? 'ERD' : 'UML'} assistant following the prompty template rules.`,
 		`Diagram Type: ${diagramType}`,
 		`Generate valid PlantUML enclosed between ${outputFence} with concise, professional notation. No extra prose or markdown fences.`,
 		composedDescription,
@@ -217,6 +224,11 @@ export default function UMLGenerator() {
 	const [ganttHistory, setGanttHistory] = useState<ChatMessage[]>([])
 	const [ganttErrorMsg, setGanttErrorMsg] = useState<string | null>(null)
 	const [ganttPromptTemplate, setGanttPromptTemplate] = useState<string | null>(null)
+	const [erdCode, setErdCode] = useState(ERD_TEMPLATE)
+	const [erdImage, setErdImage] = useState('')
+	const [erdHistory, setErdHistory] = useState<ChatMessage[]>([])
+	const [erdErrorMsg, setErdErrorMsg] = useState<string | null>(null)
+	const [erdPromptTemplate, setErdPromptTemplate] = useState<string | null>(null)
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isDarkMode, setIsDarkMode] = useState(false)
@@ -265,6 +277,7 @@ export default function UMLGenerator() {
 		fetchPromptTemplate('/api/prompts/mindmap', setMindmapPromptTemplate, 'mindmap')
 		fetchPromptTemplate('/api/prompts/ui-mockup', setUIMockupPromptTemplate, 'UI mockup')
 		fetchPromptTemplate('/api/prompts/gantt', setGanttPromptTemplate, 'Gantt')
+		fetchPromptTemplate('/api/prompts/erd', setErdPromptTemplate, 'ERD')
 	}, [])
 
 	const handleSendMessage = async () => {
@@ -547,56 +560,138 @@ export default function UMLGenerator() {
 			return
 		}
 
-		const pendingHistory = [...ganttHistory, userMessage]
-		setGanttHistory(pendingHistory)
+		if (activeMode === 'gantt') {
+			const pendingHistory = [...ganttHistory, userMessage]
+			setGanttHistory(pendingHistory)
 
-		try {
-			setIsGenerating(true)
-			setGanttErrorMsg(null)
-			setGanttImage('')
+			try {
+				setIsGenerating(true)
+				setGanttErrorMsg(null)
+				setGanttImage('')
 
-			const historyPrompt = summarizeChatHistory(pendingHistory)
-			const composedDescription = buildPromptDescription({
-				diagramType: 'gantt',
-				currentCode: ganttCode,
-				chatSummary: historyPrompt,
-				latestRequest: trimmedInput,
-				promptTemplate: ganttPromptTemplate,
-				mode: 'gantt',
-			})
+				const historyPrompt = summarizeChatHistory(pendingHistory)
+				const composedDescription = buildPromptDescription({
+					diagramType: 'gantt',
+					currentCode: ganttCode,
+					chatSummary: historyPrompt,
+					latestRequest: trimmedInput,
+					promptTemplate: ganttPromptTemplate,
+					mode: 'gantt',
+				})
 
-			const result = await generateGanttAction(composedDescription, 'gantt')
-			if (result.status === 'ok') {
-				const normalizedCode =
-					extractPlantUmlBlock(result.plantuml_code, 'gantt') ??
-					result.plantuml_code ??
-					ganttCode
-				if (normalizedCode !== ganttCode) {
-					setGanttCode(normalizedCode)
-				}
-				if (result.image_base64) {
-					const nextImage = `data:image/png;base64,${result.image_base64}`
-					setGanttImage(nextImage)
-					setGanttErrorMsg(null)
+				const result = await generateGanttAction(composedDescription, 'gantt')
+				if (result.status === 'ok') {
+					const normalizedCode =
+						extractPlantUmlBlock(result.plantuml_code, 'gantt') ??
+						result.plantuml_code ??
+						ganttCode
+					if (normalizedCode !== ganttCode) {
+						setGanttCode(normalizedCode)
+					}
+					if (result.image_base64) {
+						const nextImage = `data:image/png;base64,${result.image_base64}`
+						setGanttImage(nextImage)
+						setGanttErrorMsg(null)
+					} else {
+						const failureMsg = 'Gantt chart rendered without a preview image.'
+						setGanttImage('')
+						setGanttErrorMsg(failureMsg)
+					}
+					setIsRefreshing(false)
+					setGanttHistory(prev => [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'assistant',
+							content:
+								result.message || 'Gantt chart updated. Share your next change request!',
+						},
+					])
 				} else {
-					const failureMsg = 'Gantt chart rendered without a preview image.'
-					setGanttImage('')
+					const failureMsg = result.message || 'Failed to generate Gantt chart'
 					setGanttErrorMsg(failureMsg)
+					setIsRefreshing(false)
+					setGanttHistory(prev => [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'error',
+							content: failureMsg,
+						},
+					])
 				}
+			} catch (error: unknown) {
+				console.error(error)
+				const message =
+					error instanceof Error
+						? error.message || 'Something went wrong/Out of credits'
+						: 'Something went wrong/Out of credits'
+				setGanttErrorMsg(message)
 				setIsRefreshing(false)
 				setGanttHistory(prev => [
 					...prev,
 					{
 						id: createMessageId(),
+						role: 'error',
+						content: message,
+					},
+				])
+			} finally {
+				setIsGenerating(false)
+			}
+			return
+		}
+
+		const pendingHistory = [...erdHistory, userMessage]
+		setErdHistory(pendingHistory)
+
+		try {
+			setIsGenerating(true)
+			setErdErrorMsg(null)
+			setErdImage('')
+
+			const historyPrompt = summarizeChatHistory(pendingHistory)
+			const composedDescription = buildPromptDescription({
+				diagramType: 'ERD',
+				currentCode: erdCode,
+				chatSummary: historyPrompt,
+				latestRequest: trimmedInput,
+				promptTemplate: erdPromptTemplate,
+				mode: 'erd',
+			})
+
+			const result = await generateERDAction(composedDescription, 'ERD')
+			if (result.status === 'ok') {
+				const normalizedCode =
+					extractPlantUmlBlock(result.plantuml_code, 'erd') ??
+					result.plantuml_code ??
+					erdCode
+				if (normalizedCode !== erdCode) {
+					setErdCode(normalizedCode)
+				}
+				if (result.image_base64) {
+					const nextImage = `data:image/png;base64,${result.image_base64}`
+					setErdImage(nextImage)
+					setErdErrorMsg(null)
+				} else {
+					const failureMsg = 'ER diagram rendered without a preview image.'
+					setErdImage('')
+					setErdErrorMsg(failureMsg)
+				}
+				setIsRefreshing(false)
+				setErdHistory(prev => [
+					...prev,
+					{
+						id: createMessageId(),
 						role: 'assistant',
-						content: result.message || 'Gantt chart updated. Share your next change request!',
+						content: result.message || 'ER diagram updated. Share your next change request!',
 					},
 				])
 			} else {
-				const failureMsg = result.message || 'Failed to generate Gantt chart'
-				setGanttErrorMsg(failureMsg)
+				const failureMsg = result.message || 'Failed to generate ER diagram'
+				setErdErrorMsg(failureMsg)
 				setIsRefreshing(false)
-				setGanttHistory(prev => [
+				setErdHistory(prev => [
 					...prev,
 					{
 						id: createMessageId(),
@@ -611,9 +706,9 @@ export default function UMLGenerator() {
 				error instanceof Error
 					? error.message || 'Something went wrong/Out of credits'
 					: 'Something went wrong/Out of credits'
-			setGanttErrorMsg(message)
+			setErdErrorMsg(message)
 			setIsRefreshing(false)
-			setGanttHistory(prev => [
+			setErdHistory(prev => [
 				...prev,
 				{
 					id: createMessageId(),
@@ -651,16 +746,22 @@ export default function UMLGenerator() {
 					? currentCode
 						? 'No Gantt preview yet'
 						: 'No Gantt chart available'
-					: currentCode
-						? 'No UI mockup preview yet'
-						: 'No UI mockup available'
+					: isERDMode
+						? currentCode
+							? 'No ERD preview yet'
+							: 'No ERD available'
+						: currentCode
+							? 'No UI mockup preview yet'
+							: 'No UI mockup available'
 		const altText = isUmlMode
 			? 'UML Diagram Preview'
 			: isMindmapMode
 				? 'Mindmap Preview'
 				: isGanttMode
 					? 'Gantt Preview'
-					: 'UI Mockup Preview'
+					: isERDMode
+						? 'ERD Preview'
+						: 'UI Mockup Preview'
 		return (
 			<UMLViewer
 				umlCode={currentCode}
@@ -732,7 +833,9 @@ export default function UMLGenerator() {
 				? mindmapCode
 				: isGanttMode
 					? ganttCode
-					: uiMockupCode
+					: isERDMode
+						? erdCode
+						: uiMockupCode
 		setIsCopied(true)
 		navigator.clipboard.writeText(textToCopy)
 		setTimeout(() => {
@@ -747,14 +850,18 @@ export default function UMLGenerator() {
 				? mindmapImage
 				: isGanttMode
 					? ganttImage
-					: uiMockupImage
+					: isERDMode
+						? erdImage
+						: uiMockupImage
 		const filePrefix = isUmlMode
 			? 'uml'
 			: isMindmapMode
 				? 'mindmap'
 				: isGanttMode
 					? 'gantt'
-					: 'ui-mockup'
+					: isERDMode
+						? 'erd'
+						: 'ui-mockup'
 		if (!currentImage) {
 			return
 		}
@@ -813,7 +920,9 @@ export default function UMLGenerator() {
 				? mindmapCode
 				: isGanttMode
 					? ganttCode
-					: uiMockupCode
+					: isERDMode
+						? erdCode
+						: uiMockupCode
 		if (!currentCode.trim()) {
 			return
 		}
@@ -825,6 +934,8 @@ export default function UMLGenerator() {
 			setMindmapErrorMsg(null)
 		} else if (isGanttMode) {
 			setGanttErrorMsg(null)
+		} else if (isERDMode) {
+			setErdErrorMsg(null)
 		} else {
 			setUIMockupErrorMsg(null)
 		}
@@ -835,7 +946,9 @@ export default function UMLGenerator() {
 					? renderMindmapAction
 					: isGanttMode
 						? renderGanttAction
-						: renderUIMockupAction
+						: isERDMode
+							? renderERDAction
+							: renderUIMockupAction
 		renderAction(currentCode)
 			.then(result => {
 				if (result.status === 'ok') {
@@ -852,6 +965,9 @@ export default function UMLGenerator() {
 						} else if (isGanttMode) {
 							setGanttImage(nextImage)
 							setGanttErrorMsg(null)
+						} else if (isERDMode) {
+							setErdImage(nextImage)
+							setErdErrorMsg(null)
 						} else {
 							setUIMockupImage(nextImage)
 							setUIMockupErrorMsg(null)
@@ -864,7 +980,9 @@ export default function UMLGenerator() {
 									? 'Mindmap rendered without a preview image.'
 									: isGanttMode
 										? 'Gantt chart rendered without a preview image.'
-										: 'UI mockup rendered without a preview image.'
+										: isERDMode
+											? 'ER diagram rendered without a preview image.'
+											: 'UI mockup rendered without a preview image.'
 						if (isUmlMode) {
 							setImage('')
 							setImageByType(prev => ({ ...prev, [diagramType]: '' }))
@@ -876,6 +994,9 @@ export default function UMLGenerator() {
 						} else if (isGanttMode) {
 							setGanttImage('')
 							setGanttErrorMsg(failureMsg)
+						} else if (isERDMode) {
+							setErdImage('')
+							setErdErrorMsg(failureMsg)
 						} else {
 							setUIMockupImage('')
 							setUIMockupErrorMsg(failureMsg)
@@ -888,8 +1009,10 @@ export default function UMLGenerator() {
 							? 'Failed to render UML diagram'
 							: isMindmapMode
 								? 'Failed to render mindmap'
-								: isGanttMode
-									? 'Failed to render Gantt chart'
+							: isGanttMode
+								? 'Failed to render Gantt chart'
+								: isERDMode
+									? 'Failed to render ER diagram'
 									: 'Failed to render UI mockup')
 					if (isUmlMode) {
 						setErrorMsg(failureMsg)
@@ -898,6 +1021,8 @@ export default function UMLGenerator() {
 						setMindmapErrorMsg(failureMsg)
 					} else if (isGanttMode) {
 						setGanttErrorMsg(failureMsg)
+					} else if (isERDMode) {
+						setErdErrorMsg(failureMsg)
 					} else {
 						setUIMockupErrorMsg(failureMsg)
 					}
@@ -915,6 +1040,8 @@ export default function UMLGenerator() {
 					setMindmapErrorMsg(message)
 				} else if (isGanttMode) {
 					setGanttErrorMsg(message)
+				} else if (isERDMode) {
+					setErdErrorMsg(message)
 				} else {
 					setUIMockupErrorMsg(message)
 				}
@@ -928,62 +1055,79 @@ export default function UMLGenerator() {
 	const isUmlMode = activeMode === 'uml'
 	const isMindmapMode = activeMode === 'mindmap'
 	const isGanttMode = activeMode === 'gantt'
+	const isERDMode = activeMode === 'erd'
 	const currentCode = isUmlMode
 		? umlCode
 		: isMindmapMode
 			? mindmapCode
 			: isGanttMode
 				? ganttCode
-				: uiMockupCode
+				: isERDMode
+					? erdCode
+					: uiMockupCode
 	const currentImage = isUmlMode
 		? image
 		: isMindmapMode
 			? mindmapImage
 			: isGanttMode
 				? ganttImage
-				: uiMockupImage
+				: isERDMode
+					? erdImage
+					: uiMockupImage
 	const currentError = isUmlMode
 		? errorMsg
 		: isMindmapMode
 			? mindmapErrorMsg
 			: isGanttMode
 				? ganttErrorMsg
-				: uiMockupErrorMsg
+				: isERDMode
+					? erdErrorMsg
+					: uiMockupErrorMsg
 	const currentHistory = isUmlMode
 		? chatHistory
 		: isMindmapMode
 			? mindmapHistory
 			: isGanttMode
 				? ganttHistory
-				: uiMockupHistory
+				: isERDMode
+					? erdHistory
+					: uiMockupHistory
 	const editorTitle = isUmlMode
 		? 'PlantUML Code'
 		: isMindmapMode
 			? 'Mindmap Code'
 			: isGanttMode
 				? 'Gantt Code'
-				: 'SALT Mockup Code'
+				: isERDMode
+					? 'ERD Code'
+					: 'SALT Mockup Code'
 	const syntaxLabel = isUmlMode
 		? 'PlantUML'
 		: isMindmapMode
 			? 'PlantUML Mindmap'
 			: isGanttMode
 				? 'PlantUML Gantt'
-				: 'PlantUML SALT'
+				: isERDMode
+					? 'PlantUML ERD'
+					: 'PlantUML SALT'
 	const assistantTitle = isUmlMode
 		? 'UML Chat Assistant'
 		: isMindmapMode
 			? 'Mindmap Assistant'
 			: isGanttMode
 				? 'Gantt Assistant'
-				: 'UI Mockup Assistant'
+				: isERDMode
+					? 'ERD Assistant'
+					: 'UI Mockup Assistant'
 	const emptyChatMessage = isUmlMode
 		? 'No messages yet. Describe a system or ask for a change to get started.'
 		: isMindmapMode
 			? 'No messages yet. Describe a topic or ask for a change to get started.'
 			: isGanttMode
 				? 'No messages yet. Describe a schedule or ask for a change to get started.'
-				: 'No messages yet. Describe a screen or ask for a change to get started.'
+				: isERDMode
+					? 'No messages yet. Describe a data model or ask for a change to get started.'
+					: 'No messages yet. Describe a screen or ask for a change to get started.'
 	const tips = isUmlMode
 		? [
 				'Switch templates to explore available UML diagram types',
@@ -1011,6 +1155,15 @@ export default function UMLGenerator() {
 						'Fine-tune the Gantt code directly in the editor',
 						'Refresh the page to wipe memory',
 					]
+				: isERDMode
+					? [
+							'List entities and their attributes',
+							'Mark primary keys and foreign keys',
+							'Include cardinalities on relationships',
+							'Keep attribute names short and clear',
+							'Fine-tune the ERD code directly in the editor',
+							'Refresh the page to wipe memory',
+						]
 				: [
 						'Describe the primary screen and its sections',
 						'Call out forms, buttons, lists, and menus',
@@ -1080,6 +1233,7 @@ export default function UMLGenerator() {
 								<TabsTrigger value="mindmap">Mindmap</TabsTrigger>
 								<TabsTrigger value="ui-mockup">UI Mockups</TabsTrigger>
 								<TabsTrigger value="gantt">Gantt</TabsTrigger>
+								<TabsTrigger value="erd">ERD</TabsTrigger>
 							</TabsList>
 						</Tabs>
 					</div>
@@ -1149,6 +1303,16 @@ export default function UMLGenerator() {
 												Describe tasks, durations, and dependencies to build a Gantt chart.
 											</p>
 										</div>
+									) : isERDMode ? (
+										<div>
+											<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
+												<LayoutTemplate className="h-4 w-4 text-primary" />
+												ERD Mode
+											</h3>
+											<p className="text-sm text-muted-foreground">
+												Describe entities, attributes, and relationships to build an ER diagram.
+											</p>
+										</div>
 									) : (
 										<div>
 											<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
@@ -1180,7 +1344,9 @@ export default function UMLGenerator() {
 															? 'Describe a mindmap or request a change (Shift+Enter for new line)...'
 															: isGanttMode
 																? 'Describe a Gantt chart or request a change (Shift+Enter for new line)...'
-																: 'Describe a UI mockup or request a change (Shift+Enter for new line)...'
+																: isERDMode
+																	? 'Describe an ER diagram or request a change (Shift+Enter for new line)...'
+																	: 'Describe a UI mockup or request a change (Shift+Enter for new line)...'
 												}
 												value={chatInput}
 												onChange={e => setChatInput(e.target.value)}
@@ -1270,7 +1436,9 @@ export default function UMLGenerator() {
 														? 'Update Mindmap'
 														: isGanttMode
 															? 'Update Gantt'
-															: 'Update Mockup'}
+															: isERDMode
+																? 'Update ERD'
+																: 'Update Mockup'}
 											</>
 										)}
 									</Button>
@@ -1312,7 +1480,9 @@ export default function UMLGenerator() {
 																	? setMindmapCode(e.target.value)
 																	: isGanttMode
 																		? setGanttCode(e.target.value)
-																		: setUIMockupCode(e.target.value)
+																		: isERDMode
+																			? setErdCode(e.target.value)
+																			: setUIMockupCode(e.target.value)
 														}
 														className="font-mono h-full border-0 focus-visible:ring-0 resize-none"
 												/>
@@ -1334,7 +1504,9 @@ export default function UMLGenerator() {
 																? 'Mindmap Preview'
 																: isGanttMode
 																	? 'Gantt Preview'
-																	: 'UI Mockup Preview'}
+																	: isERDMode
+																		? 'ERD Preview'
+																		: 'UI Mockup Preview'}
 													</div>
 													<div className="text-xs text-muted-foreground">
 														{isBusy ? 'Generating...' : 'Ready'}
@@ -1369,7 +1541,9 @@ export default function UMLGenerator() {
 																	? setMindmapCode(e.target.value)
 																	: isGanttMode
 																		? setGanttCode(e.target.value)
-																		: setUIMockupCode(e.target.value)
+																		: isERDMode
+																			? setErdCode(e.target.value)
+																			: setUIMockupCode(e.target.value)
 														}
 														className="font-mono h-full border-0 focus-visible:ring-0 resize-none"
 													/>
@@ -1389,7 +1563,9 @@ export default function UMLGenerator() {
 																? 'Mindmap Preview'
 																: isGanttMode
 																	? 'Gantt Preview'
-																	: 'UI Mockup Preview'}
+																	: isERDMode
+																		? 'ERD Preview'
+																		: 'UI Mockup Preview'}
 													</div>
 													<div className="text-xs text-muted-foreground">
 														{isBusy ? 'Generating...' : 'Ready'}
