@@ -37,8 +37,18 @@ import {
 	Check,
 } from 'lucide-react'
 
-import { DIAGRAM_TEMPLATES, DIAGRAM_TYPES, DEFAULT_DIAGRAM_TYPE } from '@/constants'
+import {
+	DIAGRAM_TEMPLATES,
+	DIAGRAM_TYPES,
+	DEFAULT_DIAGRAM_TYPE,
+	MINDMAP_TEMPLATE,
+	UI_MOCKUP_TEMPLATE,
+	GANTT_TEMPLATE,
+} from '@/constants'
 import { generateUMLAction, renderUMLAction } from '@/actions/uml.action'
+import { generateMindmapAction, renderMindmapAction } from '@/actions/mindmap.action'
+import { generateUIMockupAction, renderUIMockupAction } from '@/actions/ui_mockup.action'
+import { generateGanttAction, renderGanttAction } from '@/actions/gantt.action'
 import UMLViewer from '@/components/UMLViewer'
 
 type ChatMessage = {
@@ -46,6 +56,8 @@ type ChatMessage = {
 	role: 'user' | 'assistant' | 'system' | 'error'
 	content: string
 }
+
+type DiagramMode = 'uml' | 'mindmap' | 'ui-mockup' | 'gantt'
 
 const createMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const MAX_HISTORY_MESSAGES = 10
@@ -67,9 +79,17 @@ const summarizeChatHistory = (history: ChatMessage[]) => {
 		.join('\n')
 }
 
-const extractPlantUmlBlock = (code: string | null | undefined) => {
+const extractPlantUmlBlock = (code: string | null | undefined, mode: DiagramMode) => {
 	if (!code) return null
-	const match = code.match(/@startuml[\s\S]*@enduml/i)
+	const pattern =
+		mode === 'mindmap'
+			? /@startmindmap[\s\S]*@endmindmap/i
+			: mode === 'ui-mockup'
+				? /@startsalt[\s\S]*@endsalt/i
+				: mode === 'gantt'
+					? /@startgantt[\s\S]*@endgantt/i
+					: /@startuml[\s\S]*@enduml/i
+	const match = code.match(pattern)
 	return match ? match[0] : null
 }
 
@@ -108,20 +128,44 @@ const buildPromptDescription = ({
 	chatSummary,
 	latestRequest,
 	promptTemplate,
+	mode,
 }: {
 	diagramType: string
 	currentCode: string
 	chatSummary: string
 	latestRequest: string
 	promptTemplate?: string | null
+	mode: DiagramMode
 }) => {
+	const isMindmap = mode === 'mindmap'
+	const isUIMockup = mode === 'ui-mockup'
+	const isGantt = mode === 'gantt'
+	const outputFence = isMindmap
+		? '@startmindmap and @endmindmap'
+		: isUIMockup
+			? '@startsalt and @endsalt'
+			: isGantt
+				? '@startgantt and @endgantt'
+				: '@startuml and @enduml'
+	const codeLabel = isMindmap
+		? 'Existing PlantUML mindmap (reuse and refine rather than restart):'
+		: isUIMockup
+			? 'Existing PlantUML SALT mockup (reuse and refine rather than restart):'
+			: isGantt
+				? 'Existing PlantUML Gantt chart (reuse and refine rather than restart):'
+				: 'Existing PlantUML (reuse and refine rather than restart):'
+	const emptyLabel = isMindmap
+		? 'No mindmap has been created yet. Create a fresh PlantUML mindmap.'
+		: isUIMockup
+			? 'No UI mockup has been created yet. Create a fresh PlantUML SALT mockup.'
+			: isGantt
+				? 'No Gantt chart has been created yet. Create a fresh PlantUML Gantt chart.'
+				: 'No diagram has been created yet. Create a fresh PlantUML diagram.'
 	const descriptionSections = [
 		`Latest user request:\n${latestRequest}`,
-		currentCode
-			? `Existing PlantUML (reuse and refine rather than restart):\n${currentCode}`
-			: 'No diagram has been created yet. Create a fresh PlantUML diagram.',
+		currentCode ? `${codeLabel}\n${currentCode}` : emptyLabel,
 		chatSummary ? `Recent conversation:\n${chatSummary}` : '',
-		'Respond with PlantUML only between @startuml and @enduml.',
+		`Respond with PlantUML only between ${outputFence}.`,
 	].filter(Boolean)
 
 	const composedDescription = descriptionSections.join('\n\n')
@@ -135,9 +179,9 @@ const buildPromptDescription = ({
 	}
 
 	return [
-		'You are an expert UML assistant following the prompty template rules.',
+		`You are an expert ${isMindmap ? 'mindmap' : isUIMockup ? 'UI mockup' : isGantt ? 'Gantt' : 'UML'} assistant following the prompty template rules.`,
 		`Diagram Type: ${diagramType}`,
-		'Generate valid PlantUML enclosed between @startuml and @enduml with concise, professional notation. No extra prose or markdown fences.',
+		`Generate valid PlantUML enclosed between ${outputFence} with concise, professional notation. No extra prose or markdown fences.`,
 		composedDescription,
 	].join('\n\n')
 }
@@ -153,6 +197,26 @@ export default function UMLGenerator() {
 	const [umlCodeByType, setUmlCodeByType] = useState<Record<string, string>>({
 		[DEFAULT_DIAGRAM_TYPE]: DIAGRAM_TEMPLATES[DEFAULT_DIAGRAM_TYPE] ?? '',
 	})
+	const [activeMode, setActiveMode] = useState<DiagramMode>('uml')
+	const [mindmapCode, setMindmapCode] = useState(MINDMAP_TEMPLATE)
+	const [mindmapImage, setMindmapImage] = useState('')
+	const [mindmapHistory, setMindmapHistory] = useState<ChatMessage[]>([])
+	const [mindmapErrorMsg, setMindmapErrorMsg] = useState<string | null>(null)
+	const [mindmapPromptTemplate, setMindmapPromptTemplate] = useState<string | null>(
+		null
+	)
+	const [uiMockupCode, setUIMockupCode] = useState(UI_MOCKUP_TEMPLATE)
+	const [uiMockupImage, setUIMockupImage] = useState('')
+	const [uiMockupHistory, setUIMockupHistory] = useState<ChatMessage[]>([])
+	const [uiMockupErrorMsg, setUIMockupErrorMsg] = useState<string | null>(null)
+	const [uiMockupPromptTemplate, setUIMockupPromptTemplate] = useState<string | null>(
+		null
+	)
+	const [ganttCode, setGanttCode] = useState(GANTT_TEMPLATE)
+	const [ganttImage, setGanttImage] = useState('')
+	const [ganttHistory, setGanttHistory] = useState<ChatMessage[]>([])
+	const [ganttErrorMsg, setGanttErrorMsg] = useState<string | null>(null)
+	const [ganttPromptTemplate, setGanttPromptTemplate] = useState<string | null>(null)
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isDarkMode, setIsDarkMode] = useState(false)
@@ -175,23 +239,32 @@ export default function UMLGenerator() {
 	}, [isDarkMode])
 
 	useEffect(() => {
-		const fetchPromptTemplate = async () => {
+		const fetchPromptTemplate = async (
+			endpoint: string,
+			onSuccess: (template: string | null) => void,
+			label: string
+		) => {
 			try {
-				const response = await fetch('/api/prompts/uml')
+				const response = await fetch(endpoint)
 				if (!response.ok) {
 					throw new Error(`Failed to load prompt template: ${response.status}`)
 				}
 				const data = await response.json()
 				if (data.template) {
-					setPromptTemplate(data.template)
+					onSuccess(data.template)
+					return
 				}
+				onSuccess(null)
 			} catch (error) {
-				console.error('Unable to load UML prompt template', error)
-				setPromptTemplate(null)
+				console.error(`Unable to load ${label} prompt template`, error)
+				onSuccess(null)
 			}
 		}
 
-		fetchPromptTemplate()
+		fetchPromptTemplate('/api/prompts/uml', setPromptTemplate, 'UML')
+		fetchPromptTemplate('/api/prompts/mindmap', setMindmapPromptTemplate, 'mindmap')
+		fetchPromptTemplate('/api/prompts/ui-mockup', setUIMockupPromptTemplate, 'UI mockup')
+		fetchPromptTemplate('/api/prompts/gantt', setGanttPromptTemplate, 'Gantt')
 	}, [])
 
 	const handleSendMessage = async () => {
@@ -204,74 +277,333 @@ export default function UMLGenerator() {
 			content: trimmedInput,
 		}
 
-		const pendingHistory = [...chatHistory, userMessage]
-		setChatHistory(pendingHistory)
-		setChatHistoryByType(prev => ({ ...prev, [diagramType]: pendingHistory }))
 		setChatInput('')
 
-		try {
-			setIsGenerating(true)
-			setErrorMsg(null)
-			setImage('')
+		if (activeMode === 'uml') {
+			const pendingHistory = [...chatHistory, userMessage]
+			setChatHistory(pendingHistory)
+			setChatHistoryByType(prev => ({ ...prev, [diagramType]: pendingHistory }))
 
-			const historyPrompt = summarizeChatHistory(pendingHistory)
-			const composedDescription = buildPromptDescription({
-				diagramType,
-				currentCode: umlCode,
-				chatSummary: historyPrompt,
-				latestRequest: trimmedInput,
-				promptTemplate,
-			})
+			try {
+				setIsGenerating(true)
+				setErrorMsg(null)
+				setImage('')
 
-			const result = await generateUMLAction(composedDescription, diagramType)
-			if (result.status === 'ok') {
-				const normalizedCode =
-					extractPlantUmlBlock(result.plantuml_code) ??
-					result.plantuml_code ??
-					umlCode
-				if (normalizedCode !== umlCode) {
-					setUmlCode(normalizedCode)
-					setUmlCodeByType(prev => ({ ...prev, [diagramType]: normalizedCode }))
-				}
-				if (result.image_base64) {
-					const nextImage = `data:image/png;base64,${result.image_base64}`
-					setImage(nextImage)
-					setImageByType(prev => ({ ...prev, [diagramType]: nextImage }))
-					setErrorByType(prev => ({ ...prev, [diagramType]: null }))
-					setErrorMsg(null)
+				const historyPrompt = summarizeChatHistory(pendingHistory)
+				const composedDescription = buildPromptDescription({
+					diagramType,
+					currentCode: umlCode,
+					chatSummary: historyPrompt,
+					latestRequest: trimmedInput,
+					promptTemplate,
+					mode: 'uml',
+				})
+
+				const result = await generateUMLAction(composedDescription, diagramType)
+				if (result.status === 'ok') {
+					const normalizedCode =
+						extractPlantUmlBlock(result.plantuml_code, 'uml') ??
+						result.plantuml_code ??
+						umlCode
+					if (normalizedCode !== umlCode) {
+						setUmlCode(normalizedCode)
+						setUmlCodeByType(prev => ({ ...prev, [diagramType]: normalizedCode }))
+					}
+					if (result.image_base64) {
+						const nextImage = `data:image/png;base64,${result.image_base64}`
+						setImage(nextImage)
+						setImageByType(prev => ({ ...prev, [diagramType]: nextImage }))
+						setErrorByType(prev => ({ ...prev, [diagramType]: null }))
+						setErrorMsg(null)
+					} else {
+						const failureMsg = 'Diagram rendered without a preview image.'
+						setImage('')
+						setImageByType(prev => ({ ...prev, [diagramType]: '' }))
+						setErrorMsg(failureMsg)
+						setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
+					}
+					setIsRefreshing(false)
+					setChatHistory(prev => {
+						const assistantMessage: ChatMessage = {
+							id: createMessageId(),
+							role: 'assistant',
+							content: result.message || 'Diagram updated. Share your next change request!',
+						}
+						const nextHistory = [...prev, assistantMessage]
+						setChatHistoryByType(current => ({
+							...current,
+							[diagramType]: nextHistory,
+						}))
+						return nextHistory
+					})
 				} else {
-					const failureMsg = 'Diagram rendered without a preview image.'
-					setImage('')
-					setImageByType(prev => ({ ...prev, [diagramType]: '' }))
+					const failureMsg = result.message || 'Failed to generate UML diagram'
 					setErrorMsg(failureMsg)
 					setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
+					setIsRefreshing(false)
+					setChatHistory(prev => {
+						const errorMessage: ChatMessage = {
+							id: createMessageId(),
+							role: 'error',
+							content: failureMsg,
+						}
+						const nextHistory = [...prev, errorMessage]
+						setChatHistoryByType(current => ({
+							...current,
+							[diagramType]: nextHistory,
+						}))
+						return nextHistory
+					})
 				}
-				setIsRefreshing(false)
-				setChatHistory(prev => {
-					const assistantMessage: ChatMessage = {
-						id: createMessageId(),
-						role: 'assistant',
-						content: result.message || 'Diagram updated. Share your next change request!',
-					}
-					const nextHistory = [...prev, assistantMessage]
-					setChatHistoryByType(current => ({ ...current, [diagramType]: nextHistory }))
-					return nextHistory
-				})
-			} else {
-				const failureMsg = result.message || 'Failed to generate UML diagram'
-				setErrorMsg(failureMsg)
-				setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
+			} catch (error: unknown) {
+				console.error(error)
+				const message =
+					error instanceof Error
+						? error.message || 'Something went wrong/Out of credits'
+						: 'Something went wrong/Out of credits'
+				setErrorMsg(message)
+				setErrorByType(prev => ({ ...prev, [diagramType]: message }))
 				setIsRefreshing(false)
 				setChatHistory(prev => {
 					const errorMessage: ChatMessage = {
 						id: createMessageId(),
 						role: 'error',
-						content: failureMsg,
+						content: message,
 					}
 					const nextHistory = [...prev, errorMessage]
-					setChatHistoryByType(current => ({ ...current, [diagramType]: nextHistory }))
+					setChatHistoryByType(current => ({
+						...current,
+						[diagramType]: nextHistory,
+					}))
 					return nextHistory
 				})
+			} finally {
+				setIsGenerating(false)
+			}
+			return
+		}
+
+		if (activeMode === 'mindmap') {
+			const pendingHistory = [...mindmapHistory, userMessage]
+			setMindmapHistory(pendingHistory)
+
+			try {
+				setIsGenerating(true)
+				setMindmapErrorMsg(null)
+				setMindmapImage('')
+
+				const historyPrompt = summarizeChatHistory(pendingHistory)
+				const composedDescription = buildPromptDescription({
+					diagramType: 'Mindmap',
+					currentCode: mindmapCode,
+					chatSummary: historyPrompt,
+					latestRequest: trimmedInput,
+					promptTemplate: mindmapPromptTemplate,
+					mode: 'mindmap',
+				})
+
+				const result = await generateMindmapAction(composedDescription, 'Mindmap')
+				if (result.status === 'ok') {
+					const normalizedCode =
+						extractPlantUmlBlock(result.plantuml_code, 'mindmap') ??
+						result.plantuml_code ??
+						mindmapCode
+					if (normalizedCode !== mindmapCode) {
+						setMindmapCode(normalizedCode)
+					}
+					if (result.image_base64) {
+						const nextImage = `data:image/png;base64,${result.image_base64}`
+						setMindmapImage(nextImage)
+						setMindmapErrorMsg(null)
+					} else {
+						const failureMsg = 'Mindmap rendered without a preview image.'
+						setMindmapImage('')
+						setMindmapErrorMsg(failureMsg)
+					}
+					setIsRefreshing(false)
+					setMindmapHistory(prev => [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'assistant',
+							content:
+								result.message || 'Mindmap updated. Share your next change request!',
+						},
+					])
+				} else {
+					const failureMsg = result.message || 'Failed to generate mindmap'
+					setMindmapErrorMsg(failureMsg)
+					setIsRefreshing(false)
+					setMindmapHistory(prev => [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'error',
+							content: failureMsg,
+						},
+					])
+				}
+			} catch (error: unknown) {
+				console.error(error)
+				const message =
+					error instanceof Error
+						? error.message || 'Something went wrong/Out of credits'
+						: 'Something went wrong/Out of credits'
+				setMindmapErrorMsg(message)
+				setIsRefreshing(false)
+				setMindmapHistory(prev => [
+					...prev,
+					{
+						id: createMessageId(),
+						role: 'error',
+						content: message,
+					},
+				])
+			} finally {
+				setIsGenerating(false)
+			}
+			return
+		}
+
+		if (activeMode === 'ui-mockup') {
+			const pendingHistory = [...uiMockupHistory, userMessage]
+			setUIMockupHistory(pendingHistory)
+
+			try {
+				setIsGenerating(true)
+				setUIMockupErrorMsg(null)
+				setUIMockupImage('')
+
+				const historyPrompt = summarizeChatHistory(pendingHistory)
+				const composedDescription = buildPromptDescription({
+					diagramType: 'salt',
+					currentCode: uiMockupCode,
+					chatSummary: historyPrompt,
+					latestRequest: trimmedInput,
+					promptTemplate: uiMockupPromptTemplate,
+					mode: 'ui-mockup',
+				})
+
+				const result = await generateUIMockupAction(composedDescription, 'salt')
+				if (result.status === 'ok') {
+					const normalizedCode =
+						extractPlantUmlBlock(result.plantuml_code, 'ui-mockup') ??
+						result.plantuml_code ??
+						uiMockupCode
+					if (normalizedCode !== uiMockupCode) {
+						setUIMockupCode(normalizedCode)
+					}
+					if (result.image_base64) {
+						const nextImage = `data:image/png;base64,${result.image_base64}`
+						setUIMockupImage(nextImage)
+						setUIMockupErrorMsg(null)
+					} else {
+						const failureMsg = 'UI mockup rendered without a preview image.'
+						setUIMockupImage('')
+						setUIMockupErrorMsg(failureMsg)
+					}
+					setIsRefreshing(false)
+					setUIMockupHistory(prev => [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'assistant',
+							content:
+								result.message || 'UI mockup updated. Share your next change request!',
+						},
+					])
+				} else {
+					const failureMsg = result.message || 'Failed to generate UI mockup'
+					setUIMockupErrorMsg(failureMsg)
+					setIsRefreshing(false)
+					setUIMockupHistory(prev => [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'error',
+							content: failureMsg,
+						},
+					])
+				}
+			} catch (error: unknown) {
+				console.error(error)
+				const message =
+					error instanceof Error
+						? error.message || 'Something went wrong/Out of credits'
+						: 'Something went wrong/Out of credits'
+				setUIMockupErrorMsg(message)
+				setIsRefreshing(false)
+				setUIMockupHistory(prev => [
+					...prev,
+					{
+						id: createMessageId(),
+						role: 'error',
+						content: message,
+					},
+				])
+			} finally {
+				setIsGenerating(false)
+			}
+			return
+		}
+
+		const pendingHistory = [...ganttHistory, userMessage]
+		setGanttHistory(pendingHistory)
+
+		try {
+			setIsGenerating(true)
+			setGanttErrorMsg(null)
+			setGanttImage('')
+
+			const historyPrompt = summarizeChatHistory(pendingHistory)
+			const composedDescription = buildPromptDescription({
+				diagramType: 'gantt',
+				currentCode: ganttCode,
+				chatSummary: historyPrompt,
+				latestRequest: trimmedInput,
+				promptTemplate: ganttPromptTemplate,
+				mode: 'gantt',
+			})
+
+			const result = await generateGanttAction(composedDescription, 'gantt')
+			if (result.status === 'ok') {
+				const normalizedCode =
+					extractPlantUmlBlock(result.plantuml_code, 'gantt') ??
+					result.plantuml_code ??
+					ganttCode
+				if (normalizedCode !== ganttCode) {
+					setGanttCode(normalizedCode)
+				}
+				if (result.image_base64) {
+					const nextImage = `data:image/png;base64,${result.image_base64}`
+					setGanttImage(nextImage)
+					setGanttErrorMsg(null)
+				} else {
+					const failureMsg = 'Gantt chart rendered without a preview image.'
+					setGanttImage('')
+					setGanttErrorMsg(failureMsg)
+				}
+				setIsRefreshing(false)
+				setGanttHistory(prev => [
+					...prev,
+					{
+						id: createMessageId(),
+						role: 'assistant',
+						content: result.message || 'Gantt chart updated. Share your next change request!',
+					},
+				])
+			} else {
+				const failureMsg = result.message || 'Failed to generate Gantt chart'
+				setGanttErrorMsg(failureMsg)
+				setIsRefreshing(false)
+				setGanttHistory(prev => [
+					...prev,
+					{
+						id: createMessageId(),
+						role: 'error',
+						content: failureMsg,
+					},
+				])
 			}
 		} catch (error: unknown) {
 			console.error(error)
@@ -279,52 +611,75 @@ export default function UMLGenerator() {
 				error instanceof Error
 					? error.message || 'Something went wrong/Out of credits'
 					: 'Something went wrong/Out of credits'
-			setErrorMsg(message)
-			setErrorByType(prev => ({ ...prev, [diagramType]: message }))
+			setGanttErrorMsg(message)
 			setIsRefreshing(false)
-			setChatHistory(prev => {
-				const errorMessage: ChatMessage = {
+			setGanttHistory(prev => [
+				...prev,
+				{
 					id: createMessageId(),
 					role: 'error',
 					content: message,
-				}
-				const nextHistory = [...prev, errorMessage]
-				setChatHistoryByType(current => ({ ...current, [diagramType]: nextHistory }))
-				return nextHistory
-			})
+				},
+			])
 		} finally {
 			setIsGenerating(false)
 		}
 	}
 
 	// Render helpers
-	const renderUML = () => {
-		if (errorMsg) {
+	const renderUML = (
+		currentCode: string,
+		currentImage: string,
+		currentError: string | null
+	) => {
+		if (currentError) {
 			return (
 				<div className="flex items-center justify-center h-full text-destructive">
-					{errorMsg}
+					{currentError}
 				</div>
 			)
 		}
+		const emptyLabel = isUmlMode
+			? currentCode
+				? 'No UML preview yet'
+				: 'No UML diagram available'
+			: isMindmapMode
+				? currentCode
+					? 'No mindmap preview yet'
+					: 'No mindmap available'
+				: isGanttMode
+					? currentCode
+						? 'No Gantt preview yet'
+						: 'No Gantt chart available'
+					: currentCode
+						? 'No UI mockup preview yet'
+						: 'No UI mockup available'
+		const altText = isUmlMode
+			? 'UML Diagram Preview'
+			: isMindmapMode
+				? 'Mindmap Preview'
+				: isGanttMode
+					? 'Gantt Preview'
+					: 'UI Mockup Preview'
 		return (
 			<UMLViewer
-				umlCode={umlCode}
+				umlCode={currentCode}
 				isGenerating={isBusy}
-				imageUrl={image || undefined}
+				imageUrl={currentImage || undefined}
+				altText={altText}
+				emptyLabel={emptyLabel}
 			/>
 		)
 	}
 
-	const renderChatHistory = () => {
-		if (chatHistory.length === 0) {
+	const renderChatHistory = (history: ChatMessage[], emptyMessage: string) => {
+		if (history.length === 0) {
 			return (
-				<p className="text-sm text-muted-foreground">
-					No messages yet. Describe a system or ask for a change to get started.
-				</p>
+				<p className="text-sm text-muted-foreground">{emptyMessage}</p>
 			)
 		}
 
-		return chatHistory.map(message => {
+		return history.map(message => {
 			const label =
 				message.role === 'user'
 					? 'You'
@@ -371,23 +726,44 @@ export default function UMLGenerator() {
 	}
 
 	const handleCopy = () => {
+		const textToCopy = isUmlMode
+			? umlCode
+			: isMindmapMode
+				? mindmapCode
+				: isGanttMode
+					? ganttCode
+					: uiMockupCode
 		setIsCopied(true)
-		navigator.clipboard.writeText(umlCode)
+		navigator.clipboard.writeText(textToCopy)
 		setTimeout(() => {
 			setIsCopied(false)
 		}, 2000)
 	}
 
 	const handleDownload = async () => {
-		if (!image) {
+		const currentImage = isUmlMode
+			? image
+			: isMindmapMode
+				? mindmapImage
+				: isGanttMode
+					? ganttImage
+					: uiMockupImage
+		const filePrefix = isUmlMode
+			? 'uml'
+			: isMindmapMode
+				? 'mindmap'
+				: isGanttMode
+					? 'gantt'
+					: 'ui-mockup'
+		if (!currentImage) {
 			return
 		}
 		try {
 			let blob: Blob
 			let extension = 'png'
 
-			if (image.startsWith('data:')) {
-				const [meta, data] = image.split(',', 2)
+			if (currentImage.startsWith('data:')) {
+				const [meta, data] = currentImage.split(',', 2)
 				const mimeMatch = meta.match(/data:([^;]+);base64/)
 				const mimeType = mimeMatch ? mimeMatch[1] : 'image/png'
 				const binary = atob(data)
@@ -402,7 +778,7 @@ export default function UMLGenerator() {
 					extension = 'png'
 				}
 			} else {
-				const response = await fetch(image)
+				const response = await fetch(currentImage)
 				if (!response.ok) {
 					throw new Error('Failed to fetch diagram content')
 				}
@@ -418,7 +794,7 @@ export default function UMLGenerator() {
 			const url = URL.createObjectURL(blob)
 			const link = document.createElement('a')
 			link.href = url
-			link.download = `uml.${extension}`
+			link.download = `${filePrefix}.${extension}`
 			document.body.appendChild(link) // Append the link to the DOM (required for Firefox)
 			link.click() // Trigger the download
 
@@ -431,41 +807,117 @@ export default function UMLGenerator() {
 	}
 
 	const handleManualUpdate = () => {
-		if (!umlCode.trim()) {
+		const currentCode = isUmlMode
+			? umlCode
+			: isMindmapMode
+				? mindmapCode
+				: isGanttMode
+					? ganttCode
+					: uiMockupCode
+		if (!currentCode.trim()) {
 			return
 		}
-		setErrorMsg(null)
-		setErrorByType(prev => ({ ...prev, [diagramType]: null }))
 		setIsRefreshing(true)
-		renderUMLAction(umlCode)
+		if (isUmlMode) {
+			setErrorMsg(null)
+			setErrorByType(prev => ({ ...prev, [diagramType]: null }))
+		} else if (isMindmapMode) {
+			setMindmapErrorMsg(null)
+		} else if (isGanttMode) {
+			setGanttErrorMsg(null)
+		} else {
+			setUIMockupErrorMsg(null)
+		}
+		const renderAction =
+			isUmlMode
+				? renderUMLAction
+				: isMindmapMode
+					? renderMindmapAction
+					: isGanttMode
+						? renderGanttAction
+						: renderUIMockupAction
+		renderAction(currentCode)
 			.then(result => {
 				if (result.status === 'ok') {
 					if (result.image_base64) {
 						const nextImage = `data:image/png;base64,${result.image_base64}`
-						setImage(nextImage)
-						setImageByType(prev => ({ ...prev, [diagramType]: nextImage }))
-						setErrorMsg(null)
-						setErrorByType(prev => ({ ...prev, [diagramType]: null }))
+						if (isUmlMode) {
+							setImage(nextImage)
+							setImageByType(prev => ({ ...prev, [diagramType]: nextImage }))
+							setErrorMsg(null)
+							setErrorByType(prev => ({ ...prev, [diagramType]: null }))
+						} else if (isMindmapMode) {
+							setMindmapImage(nextImage)
+							setMindmapErrorMsg(null)
+						} else if (isGanttMode) {
+							setGanttImage(nextImage)
+							setGanttErrorMsg(null)
+						} else {
+							setUIMockupImage(nextImage)
+							setUIMockupErrorMsg(null)
+						}
 					} else {
-						const failureMsg = 'Diagram rendered without a preview image.'
-						setImage('')
-						setImageByType(prev => ({ ...prev, [diagramType]: '' }))
-						setErrorMsg(failureMsg)
-						setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
+						const failureMsg =
+							isUmlMode
+								? 'Diagram rendered without a preview image.'
+								: isMindmapMode
+									? 'Mindmap rendered without a preview image.'
+									: isGanttMode
+										? 'Gantt chart rendered without a preview image.'
+										: 'UI mockup rendered without a preview image.'
+						if (isUmlMode) {
+							setImage('')
+							setImageByType(prev => ({ ...prev, [diagramType]: '' }))
+							setErrorMsg(failureMsg)
+							setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
+						} else if (isMindmapMode) {
+							setMindmapImage('')
+							setMindmapErrorMsg(failureMsg)
+						} else if (isGanttMode) {
+							setGanttImage('')
+							setGanttErrorMsg(failureMsg)
+						} else {
+							setUIMockupImage('')
+							setUIMockupErrorMsg(failureMsg)
+						}
 					}
 				} else {
-					const failureMsg = result.message || 'Failed to render UML diagram'
-					setErrorMsg(failureMsg)
-					setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
+					const failureMsg =
+						result.message ||
+						(isUmlMode
+							? 'Failed to render UML diagram'
+							: isMindmapMode
+								? 'Failed to render mindmap'
+								: isGanttMode
+									? 'Failed to render Gantt chart'
+									: 'Failed to render UI mockup')
+					if (isUmlMode) {
+						setErrorMsg(failureMsg)
+						setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
+					} else if (isMindmapMode) {
+						setMindmapErrorMsg(failureMsg)
+					} else if (isGanttMode) {
+						setGanttErrorMsg(failureMsg)
+					} else {
+						setUIMockupErrorMsg(failureMsg)
+					}
 				}
 			})
 			.catch(error => {
 				const message =
 					error instanceof Error
-						? error.message || 'Failed to render UML diagram'
-						: 'Failed to render UML diagram'
-				setErrorMsg(message)
-				setErrorByType(prev => ({ ...prev, [diagramType]: message }))
+						? error.message || 'Failed to render diagram'
+						: 'Failed to render diagram'
+				if (isUmlMode) {
+					setErrorMsg(message)
+					setErrorByType(prev => ({ ...prev, [diagramType]: message }))
+				} else if (isMindmapMode) {
+					setMindmapErrorMsg(message)
+				} else if (isGanttMode) {
+					setGanttErrorMsg(message)
+				} else {
+					setUIMockupErrorMsg(message)
+				}
 			})
 			.finally(() => {
 				setIsRefreshing(false)
@@ -473,6 +925,100 @@ export default function UMLGenerator() {
 	}
 
 	const isBusy = isGenerating || isRefreshing
+	const isUmlMode = activeMode === 'uml'
+	const isMindmapMode = activeMode === 'mindmap'
+	const isGanttMode = activeMode === 'gantt'
+	const currentCode = isUmlMode
+		? umlCode
+		: isMindmapMode
+			? mindmapCode
+			: isGanttMode
+				? ganttCode
+				: uiMockupCode
+	const currentImage = isUmlMode
+		? image
+		: isMindmapMode
+			? mindmapImage
+			: isGanttMode
+				? ganttImage
+				: uiMockupImage
+	const currentError = isUmlMode
+		? errorMsg
+		: isMindmapMode
+			? mindmapErrorMsg
+			: isGanttMode
+				? ganttErrorMsg
+				: uiMockupErrorMsg
+	const currentHistory = isUmlMode
+		? chatHistory
+		: isMindmapMode
+			? mindmapHistory
+			: isGanttMode
+				? ganttHistory
+				: uiMockupHistory
+	const editorTitle = isUmlMode
+		? 'PlantUML Code'
+		: isMindmapMode
+			? 'Mindmap Code'
+			: isGanttMode
+				? 'Gantt Code'
+				: 'SALT Mockup Code'
+	const syntaxLabel = isUmlMode
+		? 'PlantUML'
+		: isMindmapMode
+			? 'PlantUML Mindmap'
+			: isGanttMode
+				? 'PlantUML Gantt'
+				: 'PlantUML SALT'
+	const assistantTitle = isUmlMode
+		? 'UML Chat Assistant'
+		: isMindmapMode
+			? 'Mindmap Assistant'
+			: isGanttMode
+				? 'Gantt Assistant'
+				: 'UI Mockup Assistant'
+	const emptyChatMessage = isUmlMode
+		? 'No messages yet. Describe a system or ask for a change to get started.'
+		: isMindmapMode
+			? 'No messages yet. Describe a topic or ask for a change to get started.'
+			: isGanttMode
+				? 'No messages yet. Describe a schedule or ask for a change to get started.'
+				: 'No messages yet. Describe a screen or ask for a change to get started.'
+	const tips = isUmlMode
+		? [
+				'Switch templates to explore available UML diagram types',
+				'Select the diagram you need',
+				'When revising, refer to existing elements',
+				'Fine-tune the PlantUML code directly in the editor',
+				'Refresh the page to wipe memory',
+				'Save prompts elsewhere in early adoption',
+			]
+		: isMindmapMode
+			? [
+					'Describe the central topic first, then expand outward',
+					'Use short, clear node labels',
+					'Ask to group related branches together',
+					'Refine by adding or removing sub-branches',
+					'Fine-tune the mindmap code directly in the editor',
+					'Refresh the page to wipe memory',
+				]
+			: isGanttMode
+				? [
+						'List tasks with dates or durations',
+						'Call out dependencies explicitly',
+						'Include milestones for key events',
+						'Keep task names short and clear',
+						'Fine-tune the Gantt code directly in the editor',
+						'Refresh the page to wipe memory',
+					]
+				: [
+						'Describe the primary screen and its sections',
+						'Call out forms, buttons, lists, and menus',
+						'Group related UI elements into panels',
+						'Refine labels and hierarchy for clarity',
+						'Fine-tune the SALT code directly in the editor',
+						'Refresh the page to wipe memory',
+					]
 
 	return (
 		<div className={`min-h-screen bg-background text-foreground`}>
@@ -480,7 +1026,7 @@ export default function UMLGenerator() {
 				<div className="container mx-auto px-4 py-3 flex items-center justify-between">
 					<div className="flex items-center gap-2">
 						<FileCode className="h-6 w-6 text-primary" />
-						<h1 className="text-xl font-bold">Model Foundry</h1>
+						<h1 className="text-xl font-bold">UMLBot</h1>
 						<Badge variant="accent" className="ml-2 uppercase tracking-wide">
 							Alpha
 						</Badge>
@@ -524,6 +1070,19 @@ export default function UMLGenerator() {
 			</header>
 
 			<main className="container mx-auto px-4 py-6">
+				<div className="mb-4 flex justify-between items-center">
+					<Tabs
+						value={activeMode}
+						onValueChange={value => setActiveMode(value as DiagramMode)}
+					>
+							<TabsList>
+								<TabsTrigger value="uml">UML Diagrams</TabsTrigger>
+								<TabsTrigger value="mindmap">Mindmap</TabsTrigger>
+								<TabsTrigger value="ui-mockup">UI Mockups</TabsTrigger>
+								<TabsTrigger value="gantt">Gantt</TabsTrigger>
+							</TabsList>
+						</Tabs>
+					</div>
 				<div className="mb-6">
 					<Card>
 						<CardContent className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between p-4">
@@ -532,12 +1091,9 @@ export default function UMLGenerator() {
 								<h2 className="text-base font-semibold">Tips</h2>
 							</div>
 							<ul className="text-sm text-muted-foreground grid gap-1 md:grid-cols-2 md:gap-x-4 md:gap-y-1">
-								<li>• Switch templates to explore available UML diagram types</li>
-								<li>• Select the diagram you need</li>
-								<li>• When revising, refer to existing elements</li>
-								<li>• Fine-tune the PlantUML code directly in the editor</li>
-								<li>• Refresh the page to wipe memory </li>
-								<li>• Save prompts elsewhere in early adoption</li>
+								{tips.map(tip => (
+									<li key={tip}>• {tip}</li>
+								))}
 							</ul>
 						</CardContent>
 					</Card>
@@ -549,43 +1105,83 @@ export default function UMLGenerator() {
 						<Card>
 							<CardContent className="p-4">
 								<div className="space-y-4">
-									<div>
-										<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
-											<LayoutTemplate className="h-4 w-4 text-primary" />
-											Diagram Types
-										</h3>
-										<div className="space-y-2">
-											<Select
-												value={diagramType}
-												onValueChange={handleTemplateChange}
-											>
-												<SelectTrigger>
-													<SelectValue placeholder="Select template" />
-												</SelectTrigger>
-												<SelectContent>
-													{DIAGRAM_TYPES.map(type => (
-														<SelectItem key={type} value={type}>
-															{type} Diagram
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
+									{isUmlMode ? (
+										<div>
+											<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
+												<LayoutTemplate className="h-4 w-4 text-primary" />
+												Diagram Types
+											</h3>
+											<div className="space-y-2">
+												<Select
+													value={diagramType}
+													onValueChange={handleTemplateChange}
+												>
+													<SelectTrigger>
+														<SelectValue placeholder="Select template" />
+													</SelectTrigger>
+													<SelectContent>
+														{DIAGRAM_TYPES.map(type => (
+															<SelectItem key={type} value={type}>
+																{type} Diagram
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</div>
 										</div>
-									</div>
+									) : isMindmapMode ? (
+										<div>
+											<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
+												<LayoutTemplate className="h-4 w-4 text-primary" />
+												Mindmap Mode
+											</h3>
+											<p className="text-sm text-muted-foreground">
+												Describe a topic and the assistant will expand it into a structured mindmap.
+											</p>
+										</div>
+									) : isGanttMode ? (
+										<div>
+											<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
+												<LayoutTemplate className="h-4 w-4 text-primary" />
+												Gantt Mode
+											</h3>
+											<p className="text-sm text-muted-foreground">
+												Describe tasks, durations, and dependencies to build a Gantt chart.
+											</p>
+										</div>
+									) : (
+										<div>
+											<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
+												<LayoutTemplate className="h-4 w-4 text-primary" />
+												UI Mockup Mode
+											</h3>
+											<p className="text-sm text-muted-foreground">
+												Describe the interface and the assistant will draft a SALT UI mockup.
+											</p>
+										</div>
+									)}
 
 									<Separator />
 
 									<div>
 										<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
 											<Sparkles className="h-4 w-4 text-primary" />
-											UML Chat Assistant
+											{assistantTitle}
 										</h3>
 										<div className="space-y-3">
 											<div className="border rounded-md bg-muted/40 p-3 h-56 overflow-y-auto">
-												{renderChatHistory()}
+												{renderChatHistory(currentHistory, emptyChatMessage)}
 											</div>
 											<Textarea
-												placeholder="Ask for a diagram or request a change (Shift+Enter for new line)..."
+												placeholder={
+													isUmlMode
+														? 'Ask for a diagram or request a change (Shift+Enter for new line)...'
+														: isMindmapMode
+															? 'Describe a mindmap or request a change (Shift+Enter for new line)...'
+															: isGanttMode
+																? 'Describe a Gantt chart or request a change (Shift+Enter for new line)...'
+																: 'Describe a UI mockup or request a change (Shift+Enter for new line)...'
+												}
 												value={chatInput}
 												onChange={e => setChatInput(e.target.value)}
 												onKeyDown={event => {
@@ -658,7 +1254,7 @@ export default function UMLGenerator() {
 										onClick={handleManualUpdate}
 										variant="default"
 										size="sm"
-										disabled={!umlCode.trim() || isBusy}
+										disabled={!currentCode.trim() || isBusy}
 									>
 										{isRefreshing ? (
 											<>
@@ -668,7 +1264,13 @@ export default function UMLGenerator() {
 										) : (
 											<>
 												<RefreshCw className="h-4 w-4 mr-2" />
-												Update Diagram
+												{isUmlMode
+													? 'Update Diagram'
+													: isMindmapMode
+														? 'Update Mindmap'
+														: isGanttMode
+															? 'Update Gantt'
+															: 'Update Mockup'}
 											</>
 										)}
 									</Button>
@@ -692,9 +1294,9 @@ export default function UMLGenerator() {
 									<CardContent className="p-0">
 											<div className="border rounded-md">
 												<div className="bg-muted/50 p-2 border-b flex items-center justify-between">
-													<div className="text-sm font-medium">PlantUML Code</div>
+													<div className="text-sm font-medium">{editorTitle}</div>
 													<div className="text-xs text-muted-foreground">
-														Syntax: PlantUML
+														Syntax: {syntaxLabel}
 													</div>
 												</div>
 												<div
@@ -702,8 +1304,16 @@ export default function UMLGenerator() {
 													className="p-4 font-mono text-sm h-[70vh] overflow-auto"
 												>
 													<Textarea
-														value={umlCode}
-														onChange={e => setUmlCode(e.target.value)}
+														value={currentCode}
+														onChange={e =>
+															isUmlMode
+																? setUmlCode(e.target.value)
+																: isMindmapMode
+																	? setMindmapCode(e.target.value)
+																	: isGanttMode
+																		? setGanttCode(e.target.value)
+																		: setUIMockupCode(e.target.value)
+														}
 														className="font-mono h-full border-0 focus-visible:ring-0 resize-none"
 												/>
 											</div>
@@ -718,14 +1328,20 @@ export default function UMLGenerator() {
 											<div className="border rounded-md">
 												<div className="bg-muted/50 p-2 border-b flex items-center justify-between">
 													<div className="text-sm font-medium">
-														Diagram Preview
+														{isUmlMode
+															? 'Diagram Preview'
+															: isMindmapMode
+																? 'Mindmap Preview'
+																: isGanttMode
+																	? 'Gantt Preview'
+																	: 'UI Mockup Preview'}
 													</div>
 													<div className="text-xs text-muted-foreground">
 														{isBusy ? 'Generating...' : 'Ready'}
 													</div>
 												</div>
 											<div className="h-[70vh] overflow-hidden">
-												{renderUML()}
+												{renderUML(currentCode, currentImage, currentError)}
 											</div>
 										</div>
 									</CardContent>
@@ -738,17 +1354,23 @@ export default function UMLGenerator() {
 										<CardContent className="p-0">
 											<div className="border rounded-md">
 												<div className="bg-muted/50 p-2 border-b flex items-center justify-between">
-													<div className="text-sm font-medium">
-														PlantUML Code
-													</div>
+													<div className="text-sm font-medium">{editorTitle}</div>
 													<div className="text-xs text-muted-foreground">
-														Syntax: PlantUML
+														Syntax: {syntaxLabel}
 													</div>
 												</div>
 												<div className="p-4 font-mono text-sm h-[70vh] overflow-auto">
 													<Textarea
-														value={umlCode}
-														onChange={e => setUmlCode(e.target.value)}
+														value={currentCode}
+														onChange={e =>
+															isUmlMode
+																? setUmlCode(e.target.value)
+																: isMindmapMode
+																	? setMindmapCode(e.target.value)
+																	: isGanttMode
+																		? setGanttCode(e.target.value)
+																		: setUIMockupCode(e.target.value)
+														}
 														className="font-mono h-full border-0 focus-visible:ring-0 resize-none"
 													/>
 												</div>
@@ -761,14 +1383,20 @@ export default function UMLGenerator() {
 												<div className="border rounded-md">
 												<div className="bg-muted/50 p-2 border-b flex items-center justify-between">
 													<div className="text-sm font-medium">
-														Diagram Preview
+														{isUmlMode
+															? 'Diagram Preview'
+															: isMindmapMode
+																? 'Mindmap Preview'
+																: isGanttMode
+																	? 'Gantt Preview'
+																	: 'UI Mockup Preview'}
 													</div>
 													<div className="text-xs text-muted-foreground">
 														{isBusy ? 'Generating...' : 'Ready'}
 													</div>
 												</div>
 												<div className="h-[70vh] border overflow-hidden">
-													{renderUML()}
+													{renderUML(currentCode, currentImage, currentError)}
 												</div>
 											</div>
 										</CardContent>

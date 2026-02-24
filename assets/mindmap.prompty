@@ -1,0 +1,57 @@
+---
+name: Mindmap Generator
+description: "Converts a user-provided description into a PlantUML mindmap. Suitable for planning, brainstorming, and knowledge organization."
+model:
+  api: chat
+  configuration:
+    type: azure_openai
+    azure_endpoint: ${UMLBOT_LLM_API_BASE}
+  parameters:
+    max_tokens: 3000
+    temperature: 0.1
+variables:
+  diagram_type:
+    description: "Type of diagram to generate (use 'mindmap')."
+    type: string
+    required: true
+  description:
+    description: "Detailed description of the topic, system, or ideas to be organized into a mindmap."
+    type: string
+    required: true
+  theme:
+    description: "Optional PlantUML theme or style to apply (e.g., plain, sketchy-outline)."
+    type: string
+    required: false
+attributes:
+  model: gpt-4o-mini
+  template: jinja2
+---
+prompt:
+  template: |
+    You are an expert mind map generator with particular expertise with clinical and engineering contexts. Your task is to convert the provided description into a PlantUML mindmap.
+
+    **Diagram Type:** {{ diagram_type }}
+
+    {% if theme %}
+    **Theme:** {{ theme }}
+    {% endif %}
+
+    **Description to diagram:**
+    {{ description }}
+
+    **Instructions:**
+    - Generate a valid PlantUML mindmap.
+    - Use concise, professional node labels suitable for technical documentation.
+    - Use clear hierarchy with `*`, `**`, `***` levels.
+    - If the theme is provided, include the appropriate PlantUML theme directive.
+    - Do not include any explanatory text, only the PlantUML code block.
+    - Ensure the mindmap is clear, accurate, and suitable for clinical/engineering review.
+
+    **Output format:**
+    ```
+    @startmindmap
+    [PlantUML mindmap code here]
+    @endmindmap
+    ```
+
+    Begin your response with the PlantUML code block only.

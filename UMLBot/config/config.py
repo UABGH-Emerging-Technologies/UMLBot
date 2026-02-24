@@ -91,6 +91,15 @@ class UMLBotConfig:
         "Convert the following description into a PlantUML {diagram_type} diagram.\n{input}"
     )
     FALLBACK_PLANTUML_TEMPLATE = "@startuml\n' {diagram_type} diagram\n' {description}\n@enduml"
+    FALLBACK_MINDMAP_TEMPLATE = (
+        "@startmindmap\n* {diagram_type}\n** {description}\n@endmindmap"
+    )
+    FALLBACK_SALT_TEMPLATE = (
+        "@startsalt\n{diagram_type}\n{description}\n@endsalt"
+    )
+    FALLBACK_GANTT_TEMPLATE = (
+        "@startgantt\n[Task] lasts 1 day\n@endgantt"
+    )
     API_KEY_MISSING_MSG = (
         "LLM API key or base URL not found. Please ensure UMLBOT_LLM_API_KEY and "
         "UMLBOT_LLM_API_BASE are set (via /run/secrets, /workspaces/*/secrets, or "

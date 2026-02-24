@@ -15,6 +15,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 from UMLBot.config.config import UMLBotConfig
 from UMLBot.uml_draft_handler import UMLDraftHandler
+from UMLBot.mindmap_draft_handler import MindmapDraftHandler
+from UMLBot.ui_mockup_draft_handler import UIMockupDraftHandler
+from UMLBot.gantt_draft_handler import GanttDraftHandler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,105 +31,193 @@ class DiagramGenerationResult:
     image_url: str
 
 
-def generate_diagram_from_description(
-    description: str,
-    diagram_type: str,
-    theme: Optional[str] = None,
-) -> DiagramGenerationResult:
-    """
-    Runs the UMLDraftHandler pipeline and returns the PlantUML code plus the rendered image.
-    Errors are converted to a fallback PlantUML stub with contextual messaging.
-    """
-    try:
-        api_key = UMLBotConfig.LLM_API_KEY
-    except KeyError:
-        api_key = ""
-    if not api_key or not UMLBotConfig.LLM_API_BASE:
-        return DiagramGenerationResult(
-            plantuml_code="",
-            pil_image=None,
-            status_message=UMLBotConfig.API_KEY_MISSING_MSG,
-            image_url="",
-        )
+class DiagramService:
+    """Interface layer for diagram generation and rendering workflows."""
 
-    handler = UMLDraftHandler()
-    handler._init_openai(
-        openai_compatible_endpoint=UMLBotConfig.LLM_API_BASE,
-        openai_compatible_key=api_key,
-        openai_compatible_model=UMLBotConfig.LLM_MODEL,
-        name="UMLBot",
-    )
-
-    try:
-        plantuml_code = handler.process(
-            diagram_type=diagram_type,
+    def generate_diagram_from_description(
+        self,
+        description: str,
+        diagram_type: str,
+        theme: Optional[str] = None,
+    ) -> DiagramGenerationResult:
+        """
+        Runs the UMLDraftHandler pipeline and returns the PlantUML code plus the rendered image.
+        Errors are converted to a fallback PlantUML stub with contextual messaging.
+        """
+        handler = UMLDraftHandler()
+        return self._generate_from_description(
+            handler=handler,
             description=description,
+            diagram_type=diagram_type,
             theme=theme,
-            llm_interface=handler.llm_interface,
+            fallback_template=UMLBotConfig.FALLBACK_PLANTUML_TEMPLATE,
+            failure_log="LLM-backed generation failed, returning fallback diagram.",
         )
-        status_msg = UMLBotConfig.DIAGRAM_SUCCESS_MSG
-    except Exception as exc:
-        LOGGER.exception("LLM-backed generation failed, returning fallback diagram.")
-        plantuml_code = UMLBotConfig.FALLBACK_PLANTUML_TEMPLATE.format(
-            diagram_type=diagram_type,
+
+    def generate_mindmap_from_description(
+        self,
+        description: str,
+        diagram_type: str = "Mindmap",
+        theme: Optional[str] = None,
+    ) -> DiagramGenerationResult:
+        """
+        Runs the MindmapDraftHandler pipeline and returns the PlantUML code plus the rendered image.
+        Errors are converted to a fallback mindmap stub with contextual messaging.
+        """
+        handler = MindmapDraftHandler()
+        return self._generate_from_description(
+            handler=handler,
             description=description,
+            diagram_type=diagram_type,
+            theme=theme,
+            fallback_template=UMLBotConfig.FALLBACK_MINDMAP_TEMPLATE,
+            failure_log="LLM-backed mindmap generation failed, returning fallback diagram.",
         )
-        status_msg = f"LLM error: {exc}. Showing fallback stub."
 
-    cleaned_code = _strip_code_block_markers(plantuml_code)
-    normalized_code = _normalize_curly_braces(cleaned_code)
-    image_url = build_plantuml_image_url(normalized_code)
-    pil_image, status_msg = _fetch_plantuml_image(
-        image_url=image_url,
-        status_msg=status_msg,
-    )
-    return DiagramGenerationResult(
-        plantuml_code=normalized_code,
-        pil_image=pil_image,
-        status_message=status_msg,
-        image_url=image_url,
-    )
+    def generate_ui_mockup_from_description(
+        self,
+        description: str,
+        diagram_type: str = "salt",
+        theme: Optional[str] = None,
+    ) -> DiagramGenerationResult:
+        """
+        Runs the UIMockupDraftHandler pipeline and returns the PlantUML SALT code plus the rendered image.
+        Errors are converted to a fallback SALT stub with contextual messaging.
+        """
+        handler = UIMockupDraftHandler()
+        return self._generate_from_description(
+            handler=handler,
+            description=description,
+            diagram_type=diagram_type,
+            theme=theme,
+            fallback_template=UMLBotConfig.FALLBACK_SALT_TEMPLATE,
+            failure_log="LLM-backed UI mockup generation failed, returning fallback diagram.",
+        )
 
+    def generate_gantt_from_description(
+        self,
+        description: str,
+        diagram_type: str = "gantt",
+        theme: Optional[str] = None,
+    ) -> DiagramGenerationResult:
+        """
+        Runs the GanttDraftHandler pipeline and returns the PlantUML Gantt code plus the rendered image.
+        Errors are converted to a fallback Gantt stub with contextual messaging.
+        """
+        handler = GanttDraftHandler()
+        return self._generate_from_description(
+            handler=handler,
+            description=description,
+            diagram_type=diagram_type,
+            theme=theme,
+            fallback_template=UMLBotConfig.FALLBACK_GANTT_TEMPLATE,
+            failure_log="LLM-backed Gantt generation failed, returning fallback diagram.",
+        )
 
-def render_diagram_from_code(plantuml_code: str) -> Tuple[Image.Image, str, str]:
-    """
-    Re-renders an already generated PlantUML snippet.
-    Returns a placeholder image if the render fails so the UI can continue gracefully.
-    """
-    image_url = build_plantuml_image_url(plantuml_code)
-    pil_image, status_msg = _fetch_plantuml_image(
-        image_url=image_url,
-        status_msg="Re-rendered from PlantUML code.",
-    )
-    if pil_image is None:
-        pil_image = _create_placeholder_image("Diagram preview unavailable")
-    return pil_image, status_msg, image_url
+    def render_diagram_from_code(self, plantuml_code: str) -> Tuple[Image.Image, str, str]:
+        """
+        Re-renders an already generated PlantUML snippet.
+        Returns a placeholder image if the render fails so the UI can continue gracefully.
+        """
+        image_url = self.build_plantuml_image_url(plantuml_code)
+        pil_image, status_msg = _fetch_plantuml_image(
+            image_url=image_url,
+            status_msg="Re-rendered from PlantUML code.",
+        )
+        if pil_image is None:
+            pil_image = _create_placeholder_image("Diagram preview unavailable")
+        return pil_image, status_msg, image_url
 
+    def diagram_image_to_base64(self, image: Image.Image | None) -> Optional[str]:
+        """Encode a PIL image to a base64 PNG string."""
+        if image is None:
+            return None
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        buf.seek(0)
+        return base64.b64encode(buf.read()).decode("utf-8")
 
-def diagram_image_to_base64(image: Image.Image | None) -> Optional[str]:
-    """Encode a PIL image to a base64 PNG string."""
-    if image is None:
+    def build_plantuml_image_url(self, plantuml_code: str) -> str:
+        """Build a PlantUML render URL for the given diagram code."""
+        encoded = _plantuml_encode(plantuml_code)
+        return self._build_plantuml_url(UMLBotConfig.PLANTUML_SERVER_URL_TEMPLATE, encoded)
+
+    def _build_plantuml_url(self, template: str, encoded: str) -> str:
+        """
+        Support both full templates (with {encoded}) and base URLs.
+        """
+        if "{encoded}" in template:
+            return template.format(encoded=encoded)
+        base = template.rstrip("/")
+        return f"{base}/{encoded}"
+
+    def _resolve_llm_api_key(self) -> str:
+        try:
+            return UMLBotConfig.LLM_API_KEY
+        except KeyError:
+            return ""
+
+    def _validate_llm_config(self) -> DiagramGenerationResult | None:
+        api_key = self._resolve_llm_api_key()
+        if not api_key or not UMLBotConfig.LLM_API_BASE:
+            return DiagramGenerationResult(
+                plantuml_code="",
+                pil_image=None,
+                status_message=UMLBotConfig.API_KEY_MISSING_MSG,
+                image_url="",
+            )
         return None
-    buf = io.BytesIO()
-    image.save(buf, format="PNG")
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode("utf-8")
 
+    def _generate_from_description(
+        self,
+        handler: UMLDraftHandler,
+        description: str,
+        diagram_type: str,
+        theme: Optional[str],
+        fallback_template: str,
+        failure_log: str,
+    ) -> DiagramGenerationResult:
+        """Shared diagram/mindmap generation pipeline with LLM initialization and rendering."""
+        missing_config = self._validate_llm_config()
+        if missing_config is not None:
+            return missing_config
 
-def build_plantuml_image_url(plantuml_code: str) -> str:
-    """Build a PlantUML render URL for the given diagram code."""
-    encoded = _plantuml_encode(plantuml_code)
-    return _build_plantuml_url(UMLBotConfig.PLANTUML_SERVER_URL_TEMPLATE, encoded)
+        handler._init_openai(
+            openai_compatible_endpoint=UMLBotConfig.LLM_API_BASE,
+            openai_compatible_key=self._resolve_llm_api_key(),
+            openai_compatible_model=UMLBotConfig.LLM_MODEL,
+            name="UMLBot",
+        )
 
+        try:
+            plantuml_code = handler.process(
+                diagram_type=diagram_type,
+                description=description,
+                theme=theme,
+                llm_interface=handler.llm_interface,
+            )
+            status_msg = UMLBotConfig.DIAGRAM_SUCCESS_MSG
+        except Exception as exc:
+            LOGGER.exception(failure_log)
+            plantuml_code = fallback_template.format(
+                diagram_type=diagram_type,
+                description=description,
+            )
+            status_msg = f"LLM error: {exc}. Showing fallback stub."
 
-def _build_plantuml_url(template: str, encoded: str) -> str:
-    """
-    Support both full templates (with {encoded}) and base URLs.
-    """
-    if "{encoded}" in template:
-        return template.format(encoded=encoded)
-    base = template.rstrip("/")
-    return f"{base}/{encoded}"
+        cleaned_code = _strip_code_block_markers(plantuml_code)
+        normalized_code = _normalize_curly_braces(cleaned_code)
+        image_url = self.build_plantuml_image_url(normalized_code)
+        pil_image, status_msg = _fetch_plantuml_image(
+            image_url=image_url,
+            status_msg=status_msg,
+        )
+        return DiagramGenerationResult(
+            plantuml_code=normalized_code,
+            pil_image=pil_image,
+            status_message=status_msg,
+            image_url=image_url,
+        )
 
 
 def _strip_code_block_markers(text: str) -> str:

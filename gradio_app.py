@@ -7,6 +7,7 @@ Gradio-based UML Diagram Generator App
 """
 
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -20,11 +21,10 @@ sys.path.append(str(repo_root))
 
 from UMLBot.api_server import create_api_app
 from UMLBot.config.config import UMLBotConfig
-from UMLBot.services import (
-    generate_diagram_from_description,
-    render_diagram_from_code,
-)
+from UMLBot.services import DiagramService
 from UMLBot.uml_draft_handler import UMLDraftHandler
+from UMLBot.ui_mockup_draft_handler import UIMockupDraftHandler
+from UMLBot.gantt_draft_handler import GanttDraftHandler
 from llm_utils.aiweb_common.generate.ChatResponse import ChatResponseHandler
 
 
@@ -34,6 +34,13 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     # --- UML Change Recommendation Chat UI (moved to top) ---
     gr.Markdown("## UML Chat Interface")
     with gr.Row():
+        output_mode_dropdown = gr.Dropdown(
+            choices=["UML Diagram", "UI Mockup (SALT)", "Gantt Chart"],
+            value="UML Diagram",
+            label="Output Mode",
+            interactive=True,
+            show_label=True,
+        )
         diagram_type_dropdown = gr.Dropdown(
             choices=UMLBotConfig.DIAGRAM_TYPES,
             value=UMLBotConfig.DEFAULT_DIAGRAM_TYPE,
@@ -81,6 +88,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     revised_uml_code = gr.State("")
 
     from UMLBot.utils.plantuml_extractor import extract_last_plantuml_block
+    diagram_service = DiagramService()
 
     def format_chat_history(chat_history):
         """
@@ -113,7 +121,45 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         """
     )
 
-    def on_chat_submit(user_input, chat_history, plantuml_code_text, diagram_type):
+    def extract_last_salt_block(text: str) -> str:
+        code_block_pattern = re.compile(r"```(?:plantuml)?\s*([\s\S]*?)```", re.MULTILINE)
+        blocks = code_block_pattern.findall(text)
+        salt_pattern = re.compile(r"@startsalt[\s\S]*?@endsalt", re.MULTILINE)
+        blocks += salt_pattern.findall(text)
+
+        valid_blocks = []
+        for block in blocks:
+            block_stripped = block.strip()
+            block_stripped = re.sub(
+                r"^```(?:plantuml)?\s*|```$", "", block_stripped, flags=re.MULTILINE
+            ).strip()
+            if "@startsalt" in block_stripped and "@endsalt" in block_stripped:
+                valid_blocks.append(block_stripped)
+
+        if not valid_blocks:
+            raise ValueError("No valid SALT block found in response.")
+        return valid_blocks[-1]
+
+    def extract_last_gantt_block(text: str) -> str:
+        code_block_pattern = re.compile(r"```(?:plantuml)?\s*([\s\S]*?)```", re.MULTILINE)
+        blocks = code_block_pattern.findall(text)
+        gantt_pattern = re.compile(r"@startgantt[\s\S]*?@endgantt", re.MULTILINE)
+        blocks += gantt_pattern.findall(text)
+
+        valid_blocks = []
+        for block in blocks:
+            block_stripped = block.strip()
+            block_stripped = re.sub(
+                r"^```(?:plantuml)?\s*|```$", "", block_stripped, flags=re.MULTILINE
+            ).strip()
+            if "@startgantt" in block_stripped and "@endgantt" in block_stripped:
+                valid_blocks.append(block_stripped)
+
+        if not valid_blocks:
+            raise ValueError("No valid Gantt block found in response.")
+        return valid_blocks[-1]
+
+    def on_chat_submit(user_input, chat_history, plantuml_code_text, diagram_type, output_mode):
         """
         Handles submission of a UML change suggestion in the chat workflow.
         Calls the LLM backend and updates the chat and diagram preview.
@@ -134,15 +180,18 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         safe_plantuml_code = escape_curly(plantuml_code_text.strip())
         # Add user suggestion
         chat_history = chat_history + [{"role": "user", "content": user_input}]
-        # Compose single system message, injecting diagram_type
+        is_ui_mockup = output_mode == "UI Mockup (SALT)"
+        is_gantt = output_mode == "Gantt Chart"
+        effective_type = "salt" if is_ui_mockup else "gantt" if is_gantt else diagram_type
         system_msg = (
-            f"Diagram type: {diagram_type}\n"
+            f"{'Mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'Diagram'} type: {effective_type}\n"
             f"User request: {safe_user_input}\n"
             f"Current PlantUML code:\n"
             "```plantuml\n"
             f"{safe_plantuml_code}\n"
             "```\n"
-            "Please return only the updated PlantUML code."
+            "Please return only the updated PlantUML code between "
+            f"{'@startsalt and @endsalt' if is_ui_mockup else '@startgantt and @endgantt' if is_gantt else '@startuml and @enduml'}.\n"
         )
         chat_history = chat_history + [{"role": "system", "content": system_msg}]
 
@@ -159,7 +208,12 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
                 messages.append({"role": "error", "content": msg["content"]})
 
         # Call the LLM backend with retry logic
-        handler = UMLDraftHandler()
+        if is_ui_mockup:
+            handler = UIMockupDraftHandler()
+        elif is_gantt:
+            handler = GanttDraftHandler()
+        else:
+            handler = UMLDraftHandler()
         handler._init_openai(
             openai_compatible_endpoint=UMLBotConfig.LLM_API_BASE,
             openai_compatible_key=UMLBotConfig.LLM_API_KEY,
@@ -179,14 +233,23 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
                 )
                 chat_response = chat_response_handler.generate_response(messages)
                 raw_response = chat_response.response.content
-                extracted_plantuml = extract_last_plantuml_block(raw_response)
+                if is_ui_mockup:
+                    extracted_plantuml = extract_last_salt_block(raw_response)
+                elif is_gantt:
+                    extracted_plantuml = extract_last_gantt_block(raw_response)
+                else:
+                    extracted_plantuml = extract_last_plantuml_block(raw_response)
                 plantuml_code_text = extracted_plantuml
                 pil_image, status_msg = on_rerender(plantuml_code_text)
                 chat_history = chat_history + [{"role": "assistant", "content": raw_response}]
                 break
             except Exception as e:
                 retry_manager.record_error(e)
-                error_msg = f"Attempt {attempt}: UML rendering failed: {e}"
+                error_msg = (
+                    f"Attempt {attempt}: "
+                    f"{'UI mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'UML'} "
+                    f"rendering failed: {e}"
+                )
                 chat_history = chat_history + [{"role": "error", "content": error_msg}]
                 pil_image = None
                 status_msg = error_msg
@@ -224,7 +287,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         return image
 
     def on_generate(desc, dtype):
-        result = generate_diagram_from_description(desc, dtype)
+        result = diagram_service.generate_diagram_from_description(desc, dtype)
         pil_image = result.pil_image or _placeholder_image()
         return result.plantuml_code, pil_image, result.status_message
 
@@ -234,7 +297,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         Does not change the code box content.
         Only the CURRENT code box value is used to generate the diagram image.
         """
-        pil_image, status_msg, _ = render_diagram_from_code(plantuml_code_text)
+        pil_image, status_msg, _ = diagram_service.render_diagram_from_code(plantuml_code_text)
         return pil_image, status_msg
 
     # --- Chat-based UML revision workflow with error handling ---
@@ -249,7 +312,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     # Handle chat submission
     submit_chat_btn.click(
         fn=on_chat_submit,
-        inputs=[chat_input, chat_state, plantuml_code, diagram_type_dropdown],
+        inputs=[chat_input, chat_state, plantuml_code, diagram_type_dropdown, output_mode_dropdown],
         outputs=[chatbox, chat_input, plantuml_code, image, status],
         queue=False,
     )
