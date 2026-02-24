@@ -16,6 +16,8 @@ from PIL import Image, ImageDraw, ImageFont
 from UMLBot.config.config import UMLBotConfig
 from UMLBot.uml_draft_handler import UMLDraftHandler
 from UMLBot.mindmap_draft_handler import MindmapDraftHandler
+from UMLBot.ui_mockup_draft_handler import UIMockupDraftHandler
+from UMLBot.gantt_draft_handler import GanttDraftHandler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -70,6 +72,46 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_MINDMAP_TEMPLATE,
             failure_log="LLM-backed mindmap generation failed, returning fallback diagram.",
+        )
+
+    def generate_ui_mockup_from_description(
+        self,
+        description: str,
+        diagram_type: str = "salt",
+        theme: Optional[str] = None,
+    ) -> DiagramGenerationResult:
+        """
+        Runs the UIMockupDraftHandler pipeline and returns the PlantUML SALT code plus the rendered image.
+        Errors are converted to a fallback SALT stub with contextual messaging.
+        """
+        handler = UIMockupDraftHandler()
+        return self._generate_from_description(
+            handler=handler,
+            description=description,
+            diagram_type=diagram_type,
+            theme=theme,
+            fallback_template=UMLBotConfig.FALLBACK_SALT_TEMPLATE,
+            failure_log="LLM-backed UI mockup generation failed, returning fallback diagram.",
+        )
+
+    def generate_gantt_from_description(
+        self,
+        description: str,
+        diagram_type: str = "gantt",
+        theme: Optional[str] = None,
+    ) -> DiagramGenerationResult:
+        """
+        Runs the GanttDraftHandler pipeline and returns the PlantUML Gantt code plus the rendered image.
+        Errors are converted to a fallback Gantt stub with contextual messaging.
+        """
+        handler = GanttDraftHandler()
+        return self._generate_from_description(
+            handler=handler,
+            description=description,
+            diagram_type=diagram_type,
+            theme=theme,
+            fallback_template=UMLBotConfig.FALLBACK_GANTT_TEMPLATE,
+            failure_log="LLM-backed Gantt generation failed, returning fallback diagram.",
         )
 
     def render_diagram_from_code(self, plantuml_code: str) -> Tuple[Image.Image, str, str]:
@@ -247,4 +289,3 @@ def _plantuml_encode(text: str) -> str:
         "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_",
     )
     return b64.translate(translation)
-

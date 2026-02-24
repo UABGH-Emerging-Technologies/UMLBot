@@ -125,3 +125,28 @@ export const MINDMAP_TEMPLATE = `@startmindmap
 *** Detail B1
 *** Detail B2
 @endmindmap`
+
+export const UI_MOCKUP_TEMPLATE = `@startsalt
+{
+  Just plain text
+  [This is my button]
+  ()  Unchecked radio
+  (X) Checked radio
+  []  Unchecked box
+  [X] Checked box
+  "Enter text here   "
+  ^This is a droplist^
+}
+@endsalt`
+
+export const GANTT_TEMPLATE = `@startgantt
+Project starts 2026-01-01
+[Discovery] lasts 5 days
+[Design] lasts 10 days
+[Build] lasts 15 days
+[QA] lasts 7 days
+[Launch] happens at 2026-02-07
+[Design] starts at [Discovery]'s end
+[Build] starts at [Design]'s end
+[QA] starts at [Build]'s end
+@endgantt`
