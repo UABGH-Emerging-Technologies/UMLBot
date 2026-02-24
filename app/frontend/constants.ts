@@ -115,3 +115,13 @@ Sensor -> Controller: heartbeat
 Controller -> Sensor: ack
 @enduml`,
 }
+
+export const MINDMAP_TEMPLATE = `@startmindmap
+* Central Topic
+** Branch A
+*** Detail A1
+*** Detail A2
+** Branch B
+*** Detail B1
+*** Detail B2
+@endmindmap`

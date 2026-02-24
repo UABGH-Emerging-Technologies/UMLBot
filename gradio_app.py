@@ -20,10 +20,7 @@ sys.path.append(str(repo_root))
 
 from UMLBot.api_server import create_api_app
 from UMLBot.config.config import UMLBotConfig
-from UMLBot.services import (
-    generate_diagram_from_description,
-    render_diagram_from_code,
-)
+from UMLBot.services import DiagramService
 from UMLBot.uml_draft_handler import UMLDraftHandler
 from llm_utils.aiweb_common.generate.ChatResponse import ChatResponseHandler
 
@@ -81,6 +78,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     revised_uml_code = gr.State("")
 
     from UMLBot.utils.plantuml_extractor import extract_last_plantuml_block
+    diagram_service = DiagramService()
 
     def format_chat_history(chat_history):
         """
@@ -224,7 +222,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         return image
 
     def on_generate(desc, dtype):
-        result = generate_diagram_from_description(desc, dtype)
+        result = diagram_service.generate_diagram_from_description(desc, dtype)
         pil_image = result.pil_image or _placeholder_image()
         return result.plantuml_code, pil_image, result.status_message
 
@@ -234,7 +232,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         Does not change the code box content.
         Only the CURRENT code box value is used to generate the diagram image.
         """
-        pil_image, status_msg, _ = render_diagram_from_code(plantuml_code_text)
+        pil_image, status_msg, _ = diagram_service.render_diagram_from_code(plantuml_code_text)
         return pil_image, status_msg
 
     # --- Chat-based UML revision workflow with error handling ---

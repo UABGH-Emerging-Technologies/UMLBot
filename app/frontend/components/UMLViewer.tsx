@@ -8,10 +8,20 @@ type UMLViewerProps = {
 	umlCode: string
 	isGenerating: boolean
 	imageUrl?: string
+	altText?: string
+	emptyLabel?: string
 }
 
-const UMLViewer = ({ umlCode, isGenerating, imageUrl }: UMLViewerProps) => {
+const UMLViewer = ({
+	umlCode,
+	isGenerating,
+	imageUrl,
+	altText,
+	emptyLabel,
+}: UMLViewerProps) => {
 	const previewSrc = imageUrl
+	const fallbackAlt = altText ?? 'Diagram Preview'
+	const emptyMessage = emptyLabel ?? (umlCode ? 'No preview yet' : 'No diagram available')
 
 	try {
 		return (
@@ -62,7 +72,7 @@ const UMLViewer = ({ umlCode, isGenerating, imageUrl }: UMLViewerProps) => {
 										{previewSrc ? (
 											<Image
 												src={previewSrc}
-												alt="UML Diagram Preview"
+												alt={fallbackAlt}
 												width={1600}
 												height={1200}
 												className="w-full h-full object-contain"
@@ -71,7 +81,7 @@ const UMLViewer = ({ umlCode, isGenerating, imageUrl }: UMLViewerProps) => {
 												unoptimized
 											/>
 										) : (
-											<p>{umlCode ? 'No preview yet' : 'No diagram available'}</p>
+											<p>{emptyMessage}</p>
 										)}
 									</div>
 								</TransformComponent>
