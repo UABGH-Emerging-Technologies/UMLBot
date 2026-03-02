@@ -9,10 +9,10 @@ flake8
 typer
 streamlit
 st_pages
-langchain
-langchain-prompty
-langchain-openai
-langchain-community
+langchain>=0.3,<1.0
+langchain-prompty>=0.1,<1.0
+langchain-openai>=0.3,<1.0
+langchain-community>=0.3,<1.0
 openai
 tiktoken
 pyodbc
@@ -29,6 +29,9 @@ rapidfuzz
 uvicorn
 python-multipart
 fastapi
+python-docx
+python-magic
+pypandoc
 ./llm_utils
 pytest
 gradio>=5.49.1

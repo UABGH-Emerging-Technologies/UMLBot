@@ -18,10 +18,10 @@ help:
 # Styling
 .PHONY: style
 style:
-	black UMLBot app tests gradio_app.py setup.py __init__.py
+	black UMLBot app tests gradio_app.py streamlit_app.py setup.py __init__.py
 	flake8
-	python3 -m isort UMLBot app tests gradio_app.py setup.py __init__.py
-	autopep8 --recursive --aggressive --aggressive UMLBot app tests gradio_app.py setup.py __init__.py
+	python3 -m isort UMLBot app tests gradio_app.py streamlit_app.py setup.py __init__.py
+	autopep8 --recursive --aggressive --aggressive UMLBot app tests gradio_app.py streamlit_app.py setup.py __init__.py
 # Environment
 .ONESHELL:
 venv:
@@ -55,6 +55,11 @@ plantuml-down:
 .PHONY: plantuml-logs
 plantuml-logs:
 	docker logs -f umlbot-plantuml
+
+# Streamlit frontend
+.PHONY: streamlit
+streamlit:
+	PYTHONPATH=$(PWD) .venv/bin/streamlit run streamlit_app.py --server.port 8501
 
 # Full-stack single container
 .PHONY: docker-build

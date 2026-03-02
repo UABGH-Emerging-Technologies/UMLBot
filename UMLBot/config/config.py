@@ -149,7 +149,12 @@ class UMLBotConfig:
     if CORS_ALLOW_ORIGINS:
         CORS_ALLOW_ORIGINS = [origin.strip() for origin in CORS_ALLOW_ORIGINS.split(",")]
     else:
-        CORS_ALLOW_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+        CORS_ALLOW_ORIGINS = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8501",
+            "http://127.0.0.1:8501",
+        ]
     # If using Azure, set LLM_API_BASE to your Azure endpoint and adjust model name as needed.
 
     # MLFlow model registry
