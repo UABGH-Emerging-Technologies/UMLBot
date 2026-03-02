@@ -106,6 +106,15 @@ class UMLBotConfig:
     FALLBACK_JSON_TEMPLATE = (
         "@startjson\n{\n  \"sample\": true\n}\n@endjson"
     )
+    FALLBACK_C4_TEMPLATE = (
+        "@startuml\n"
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml\n"
+        "title {diagram_type}\n"
+        "Person(user, \"User\", \"\")\n"
+        "System(system, \"System\", \"{description}\")\n"
+        "Rel(user, system, \"Uses\")\n"
+        "@enduml"
+    )
     API_KEY_MISSING_MSG = (
         "LLM API key or base URL not found. Please ensure UMLBOT_LLM_API_KEY and "
         "UMLBOT_LLM_API_BASE are set (via /run/secrets, /workspaces/*/secrets, or "

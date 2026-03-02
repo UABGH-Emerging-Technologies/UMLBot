@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from UMLBot.config.config import UMLBotConfig
 from UMLBot.diagram_handlers import (
+    C4DraftHandler,
     ERDraftHandler,
     GanttDraftHandler,
     JsonDraftHandler,
@@ -156,6 +157,26 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_JSON_TEMPLATE,
             failure_log="LLM-backed JSON generation failed, returning fallback diagram.",
+        )
+
+    def generate_c4_from_description(
+        self,
+        description: str,
+        diagram_type: str = "C4",
+        theme: Optional[str] = None,
+    ) -> DiagramGenerationResult:
+        """
+        Runs the C4DraftHandler pipeline and returns the PlantUML C4 diagram code plus the rendered image.
+        Errors are converted to a fallback C4 diagram stub with contextual messaging.
+        """
+        handler = C4DraftHandler()
+        return self._generate_from_description(
+            handler=handler,
+            description=description,
+            diagram_type=diagram_type,
+            theme=theme,
+            fallback_template=UMLBotConfig.FALLBACK_C4_TEMPLATE,
+            failure_log="LLM-backed C4 generation failed, returning fallback diagram.",
         )
 
     def render_diagram_from_code(self, plantuml_code: str) -> Tuple[Image.Image, str, str]:

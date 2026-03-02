@@ -638,10 +638,208 @@ def generate_diagram(description: str, diagram_type: str) -> DiagramGenerationRe
 
 ## Testing
 
+### Test Organization
 - Test files: `tests/test_*.py`
-- Run all tests: `make test` or `PYTHONPATH=$(pwd) .venv/bin/python -m pytest -q`
-- Run specific test: `PYTHONPATH=$(pwd) .venv/bin/python -m pytest tests/test_file.py::test_name -v`
-- Tests may require `.env` configuration for LLM integration tests
+- Follow naming: `test_{module_name}.py`
+- Test functions: `test_{function_name}_{scenario}()`
+
+### Running Tests
+
+**All tests:**
+```bash
+make test
+# Or: PYTHONPATH=$(pwd) .venv/bin/python -m pytest -q
+```
+
+**Specific test file:**
+```bash
+PYTHONPATH=$(pwd) .venv/bin/python -m pytest tests/test_diagram_service.py -v
+```
+
+**Specific test function:**
+```bash
+PYTHONPATH=$(pwd) .venv/bin/python -m pytest tests/test_uml_draft_handler.py::test_handler_loads_prompty -v
+```
+
+**With output (no capture):**
+```bash
+PYTHONPATH=$(pwd) .venv/bin/python -m pytest tests/test_file.py -v -s
+```
+
+**With coverage:**
+```bash
+PYTHONPATH=$(pwd) .venv/bin/python -m pytest --cov=UMLBot tests/
+```
+
+### Test Requirements
+- Tests must be fast, isolated, and deterministic
+- Mock external dependencies (LLM calls, HTTP requests, file I/O)
+- Use pytest fixtures for common setup
+- Tests may require `.env` configuration for integration tests
+- Use `monkeypatch` for environment variables and function mocking
+
+### Example Test Structure
+```python
+import pytest
+from unittest.mock import Mock, patch
+from UMLBot.diagram_handlers import UMLDraftHandler
+
+@pytest.fixture
+def mock_config():
+    """Fixture providing test configuration."""
+    from UMLBot.config.config import UMLBotConfig
+    config = Mock(spec=UMLBotConfig)
+    config.LLM_API_BASE = "http://test"
+    config.LLM_API_KEY = "test-key"
+    config.LLM_MODEL = "gpt-4o-mini"
+    return config
+
+def test_handler_loads_prompty(mock_config):
+    """Test that handler can load its prompty template."""
+    handler = UMLDraftHandler(config=mock_config)
+    assert handler.prompty_path.exists()
+    prompt_template = handler.load_prompty()
+    assert prompt_template is not None
+
+@patch('UMLBot.diagram_handlers.uml_draft_handler.ChatOpenAI')
+def test_handler_generates_plantuml(mock_openai, mock_config):
+    """Test PlantUML code generation."""
+    # Mock LLM response
+    mock_llm = Mock()
+    mock_llm.invoke.return_value = "@startuml\nactor User\n@enduml"
+    mock_openai.return_value = mock_llm
+
+    handler = UMLDraftHandler(config=mock_config)
+    result = handler.generate("user login", "use case", None)
+
+    assert "@startuml" in result
+    assert "@enduml" in result
+```
+
+### Integration Tests
+- Located in `tests/test_integration_*.py`
+- Require actual LLM API access (set `UMLBOT_LLM_API_KEY`)
+- May be slower; mark with `@pytest.mark.integration`
+- Can be skipped in CI: `pytest -m "not integration"`
+
+### Test Data
+- Sample PlantUML code in `tests/fixtures/`
+- Sample prompty templates for testing
+- Mock responses for LLM calls
+
+## Debugging
+
+### Logging
+**Log files** (created in `UMLBot/logs/`):
+- `info.log` - INFO level and above
+- `error.log` - ERROR level only
+
+**Log in code:**
+```python
+import logging
+LOGGER = logging.getLogger(__name__)
+
+LOGGER.info("Processing diagram request")
+LOGGER.error("Failed to render PlantUML", exc_info=True)
+LOGGER.debug(f"Encoded PlantUML: {encoded[:50]}...")
+```
+
+**View logs:**
+```bash
+tail -f UMLBot/logs/info.log
+tail -f UMLBot/logs/error.log
+```
+
+### Common Issues & Solutions
+
+**1. "LLM API key not found"**
+- Check `.env` file exists and has `UMLBOT_LLM_API_KEY`
+- Verify env vars loaded: `set -a && source .env && set +a`
+- Check `manage_sensitive()` search paths
+
+**2. "PlantUML server connection refused"**
+- Ensure PlantUML server is running: `make plantuml-up`
+- Check server is responding: `curl http://localhost:8080/png/SoWkIImgAStDuNBAJrBGjLDmpCbCJbMmKiX8pSd9vt98pKi1IW80`
+- In Docker: use `http://plantuml:8080` not `localhost`
+
+**3. "Prompty file not found"**
+- Check path is relative to project root: `Path(__file__).parents[2] / "assets" / "diagram.prompty"`
+- Verify file exists: `ls -la assets/*.prompty`
+
+**4. "Invalid PlantUML code"**
+- Check LLM response is properly extracted
+- Verify code has `@startuml` and `@enduml` markers
+- Test code directly: `curl -X POST http://localhost:8080/png -d @test.puml`
+
+**5. "Type errors in mypy"**
+- Run mypy: `mypy UMLBot/`
+- Common fixes:
+  - Add type annotations: `def func(arg: str) -> int:`
+  - Handle None: `if value is not None:`
+  - Use `Optional[T]` for nullable types
+
+**6. "Import errors"**
+- Check PYTHONPATH: `export PYTHONPATH=$(pwd)`
+- Verify package structure has `__init__.py` files
+- Check relative imports vs absolute
+
+### Debug Mode
+**Enable verbose logging:**
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+**Test single component:**
+```python
+# Test handler directly
+from UMLBot.diagram_handlers import UMLDraftHandler
+handler = UMLDraftHandler()
+result = handler.generate("test", "class", None)
+print(result)
+
+# Test DiagramService
+from UMLBot.services import DiagramService
+service = DiagramService()
+result = service.generate_diagram_from_description("test", "class")
+print(result.plantuml_code)
+
+# Test PlantUML rendering
+from UMLBot.services import DiagramService
+service = DiagramService()
+code = "@startuml\nactor User\n@enduml"
+image, url = service.render_plantuml(code)
+print(f"URL: {url}")
+image.show()  # Display image
+```
+
+### VSCode Debugging
+**launch.json for backend:**
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Uvicorn",
+      "type": "python",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["gradio_app:app", "--reload"],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: Pytest Current File",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["${file}", "-v", "-s"],
+      "console": "integratedTerminal",
+      "env": {"PYTHONPATH": "${workspaceFolder}"}
+    }
+  ]
+}
+```
 
 ## Key Configuration
 
@@ -807,9 +1005,307 @@ aiweb_common/
 - Diagram handlers: `docs/UMLBot/diagram_handlers/`
 - Build docs: `make docs` (serves on port 8000)
 
+## Working with This Codebase - Step-by-Step Guide
+
+### When Starting a New Task
+
+**1. Understand the request**
+- What diagram type is involved? (UML, mindmap, Gantt, etc.)
+- Is this a new feature, bug fix, or refactor?
+- What files/modules will be affected?
+
+**2. Search for existing functionality**
+```bash
+# Search in llm_utils first
+rg "function_name" llm_utils/
+
+# Search in UMLBot
+rg "class_name" UMLBot/
+
+# Find files by pattern
+find . -name "*handler*.py"
+```
+
+**3. Read relevant files**
+```bash
+# Read configuration
+cat UMLBot/config/config.py
+
+# Read handler
+cat UMLBot/diagram_handlers/uml_draft_handler.py
+
+# Read service
+cat UMLBot/services/diagram_service.py
+```
+
+**4. Check tests**
+```bash
+# Find related tests
+find tests/ -name "*test_handler*.py"
+
+# Run tests to understand behavior
+PYTHONPATH=$(pwd) .venv/bin/python -m pytest tests/test_uml_draft_handler.py -v
+```
+
+### When Adding a Feature
+
+**1. Determine if it requires a new handler**
+- New diagram type? → Follow "How to Add a New Diagram Type" section
+- New LLM capability? → Check `llm_utils/aiweb_common/generate/` first
+- New file operation? → Check `llm_utils/aiweb_common/file_operations/` first
+
+**2. Plan the changes**
+- List files to modify
+- Identify dependencies
+- Consider backward compatibility
+
+**3. Implement with tests**
+```bash
+# Create test first (TDD)
+vim tests/test_new_feature.py
+
+# Run test (should fail)
+PYTHONPATH=$(pwd) pytest tests/test_new_feature.py -v
+
+# Implement feature
+vim UMLBot/services/diagram_service.py
+
+# Run test (should pass)
+PYTHONPATH=$(pwd) pytest tests/test_new_feature.py -v
+```
+
+**4. Format and validate**
+```bash
+# Format code
+make style
+
+# Run all tests
+make test
+
+# Check types
+mypy UMLBot/
+```
+
+**5. Update documentation**
+```bash
+# Update docstrings in code
+# Add entry to docs/
+vim docs/UMLBot/new_feature.md
+
+# Test docs build
+make docs
+```
+
+### When Fixing a Bug
+
+**1. Reproduce the bug**
+```bash
+# Run the specific test or manual test
+PYTHONPATH=$(pwd) pytest tests/test_problematic.py::test_bug -v -s
+
+# Or run the app and reproduce manually
+uvicorn gradio_app:app --reload
+```
+
+**2. Add a test that fails**
+```python
+def test_bug_description():
+    """Test that reproduces the bug."""
+    # Setup that triggers the bug
+    handler = UMLDraftHandler()
+    result = handler.generate("problematic input", "class", None)
+    # Assert expected behavior (currently fails)
+    assert "@startuml" in result
+```
+
+**3. Fix the issue**
+- Identify root cause
+- Fix in the minimal scope
+- Verify test now passes
+
+**4. Check for similar issues**
+```bash
+# Search for similar patterns
+rg "problematic_pattern" UMLBot/
+```
+
+### When Refactoring
+
+**1. Ensure tests pass first**
+```bash
+make test
+```
+
+**2. Make incremental changes**
+- One refactor at a time
+- Run tests after each change
+- Commit after each successful change
+
+**3. Don't change behavior**
+- Refactoring should not change functionality
+- All existing tests should still pass
+- Only internal structure changes
+
+### When Working with LLM Code
+
+**CRITICAL CHECKLIST:**
+- [ ] Did you search `llm_utils/aiweb_common/` first?
+- [ ] Are you inheriting from `WorkflowHandler`?
+- [ ] Are you using `manage_sensitive()` for credentials?
+- [ ] Are you loading prompts via `load_prompty()`?
+- [ ] Are you using `_init_openai()` for LLM setup?
+- [ ] Are you using `check_content_type()` for response handling?
+- [ ] Did you add a prompty template in `assets/`?
+- [ ] Did you validate the prompty template?
+
+**Pattern to follow:**
+```python
+from llm_utils.aiweb_common.WorkflowHandler import WorkflowHandler
+
+class MyHandler(WorkflowHandler):
+    def __init__(self):
+        super().__init__()
+        self.prompty_path = Path(__file__).parents[2] / "assets" / "my.prompty"
+
+    def generate(self, description: str) -> str:
+        # 1. Load prompty
+        prompt = self.load_prompty()
+
+        # 2. Init LLM
+        self._init_openai(
+            openai_compatible_endpoint=config.LLM_API_BASE,
+            openai_compatible_key=config.LLM_API_KEY,
+            openai_compatible_model=config.LLM_MODEL,
+            name="MyHandler"
+        )
+
+        # 3. Format & invoke
+        formatted = prompt.format_messages(description=description)
+        response = self.llm_interface.invoke(formatted)
+
+        # 4. Extract content
+        return self.check_content_type(response)
+```
+
+### When You're Stuck
+
+**1. Check the documentation**
+```bash
+# View docs
+make docs
+# Opens on http://0.0.0.0:8000
+```
+
+**2. Look at similar implementations**
+```bash
+# Find similar handlers
+ls UMLBot/diagram_handlers/
+
+# Read a working handler
+cat UMLBot/diagram_handlers/mindmap_draft_handler.py
+```
+
+**3. Check existing tests**
+```bash
+# See how others test this
+cat tests/test_diagram_service.py
+```
+
+**4. Run with debug logging**
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+**5. Test components in isolation**
+```python
+# Python REPL
+python
+>>> from UMLBot.services import DiagramService
+>>> service = DiagramService()
+>>> result = service.generate_diagram_from_description("test", "class")
+>>> print(result.plantuml_code)
+```
+
 ## Git Workflow
 
-- Main branch: `main`
-- Development branch: `develop`
-- PRs typically target `develop`
-- Format code with `make style` before committing
+### Branch Structure
+- **main** - Production-ready code
+- **develop** - Integration branch for features
+- **feature/*** - New features branch from develop
+- **bugfix/*** - Bug fixes branch from develop
+- **hotfix/*** - Emergency fixes branch from main
+
+### Typical Workflow
+```bash
+# Start from develop
+git checkout develop
+git pull origin develop
+
+# Create feature branch
+git checkout -b feature/my-new-feature
+
+# Make changes
+vim UMLBot/services/diagram_service.py
+
+# Format code (REQUIRED before commit)
+make style
+
+# Run tests
+make test
+
+# Commit (only if tests pass)
+git add UMLBot/services/diagram_service.py
+git commit -m "feat: add network diagram support
+
+- Add NetworkDraftHandler
+- Add network diagram endpoint
+- Add tests for network diagrams
+"
+
+# Push and create PR
+git push origin feature/my-new-feature
+# Create PR targeting develop
+```
+
+### Commit Message Format
+```
+<type>: <subject>
+
+<body>
+
+<footer>
+```
+
+**Types:**
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation changes
+- `style:` - Code formatting (no functional changes)
+- `refactor:` - Code restructuring (no functional changes)
+- `test:` - Adding or updating tests
+- `chore:` - Maintenance tasks
+
+**Example:**
+```
+feat: add network diagram generation support
+
+- Create NetworkDraftHandler inheriting from WorkflowHandler
+- Add network_diagram.prompty template
+- Add generate_network_from_description to DiagramService
+- Add /api/network endpoint to API server
+- Add tests for network diagram generation
+
+Closes #123
+```
+
+### Before Creating PR
+**Checklist:**
+- [ ] Code formatted with `make style`
+- [ ] All tests pass (`make test`)
+- [ ] New tests added for new functionality
+- [ ] Documentation updated (docstrings + docs/)
+- [ ] No sensitive data in code or commits
+- [ ] No files from restricted list
+- [ ] Commit messages are clear and descriptive
+- [ ] PR description explains what and why

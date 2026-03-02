@@ -179,3 +179,17 @@ export const JSON_TEMPLATE = `@startjson
   "features": ["uml", "mindmap", "mockup", "gantt", "erd", "json"]
 }
 @endjson`
+
+export const C4_TEMPLATE = `@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Sample C4 Context Diagram
+
+Person(user, "User", "End user of the system")
+System(app, "Application", "Main application system")
+System_Ext(external, "External System", "Third-party service")
+
+Rel(user, app, "Uses")
+Rel(app, external, "Calls", "HTTPS")
+
+@enduml`

@@ -23,6 +23,7 @@ from UMLBot.api_server import create_api_app
 from UMLBot.config.config import UMLBotConfig
 from UMLBot.services import DiagramService
 from UMLBot.diagram_handlers import (
+    C4DraftHandler,
     ERDraftHandler,
     GanttDraftHandler,
     JsonDraftHandler,
@@ -41,7 +42,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     gr.Markdown("## UML Chat Interface")
     with gr.Row():
         output_mode_dropdown = gr.Dropdown(
-            choices=["UML Diagram", "Mindmap", "UI Mockup (SALT)", "Gantt Chart", "ER Diagram", "JSON"],
+            choices=["UML Diagram", "Mindmap", "UI Mockup (SALT)", "Gantt Chart", "ER Diagram", "JSON", "C4 Diagram"],
             value="UML Diagram",
             label="Output Mode",
             interactive=True,
@@ -229,6 +230,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         is_gantt = output_mode == "Gantt Chart"
         is_erd = output_mode == "ER Diagram"
         is_json = output_mode == "JSON"
+        is_c4 = output_mode == "C4 Diagram"
         effective_type = (
             "mindmap"
             if is_mindmap
@@ -240,10 +242,12 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
             if is_erd
             else "json"
             if is_json
+            else "C4"
+            if is_c4
             else diagram_type
         )
         system_msg = (
-            f"{'Mindmap' if is_mindmap else 'Mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'ERD' if is_erd else 'JSON' if is_json else 'Diagram'} type: {effective_type}\n"
+            f"{'Mindmap' if is_mindmap else 'Mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'ERD' if is_erd else 'JSON' if is_json else 'C4' if is_c4 else 'Diagram'} type: {effective_type}\n"
             f"User request: {safe_user_input}\n"
             f"Current PlantUML code:\n"
             "```plantuml\n"
@@ -251,6 +255,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
             "```\n"
             "Please return only the updated PlantUML code between "
             f"{'@startmindmap and @endmindmap' if is_mindmap else '@startsalt and @endsalt' if is_ui_mockup else '@startgantt and @endgantt' if is_gantt else '@startjson and @endjson' if is_json else '@startuml and @enduml'}.\n"
+            f"{'Use C4-PlantUML includes (e.g., !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml).' if is_c4 else ''}\n"
         )
         chat_history = chat_history + [{"role": "system", "content": system_msg}]
 
@@ -277,6 +282,8 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
             handler = ERDraftHandler()
         elif is_json:
             handler = JsonDraftHandler()
+        elif is_c4:
+            handler = C4DraftHandler()
         else:
             handler = UMLDraftHandler()
         handler._init_openai(
@@ -306,6 +313,8 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
                     extracted_plantuml = extract_last_json_block(raw_response)
                 elif is_erd:
                     extracted_plantuml = extract_last_plantuml_block(raw_response)
+                elif is_c4:
+                    extracted_plantuml = extract_last_plantuml_block(raw_response)
                 else:
                     extracted_plantuml = extract_last_plantuml_block(raw_response)
                 plantuml_code_text = extracted_plantuml
@@ -316,7 +325,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
                 retry_manager.record_error(e)
                 error_msg = (
                     f"Attempt {attempt}: "
-                    f"{'Mindmap' if is_mindmap else 'UI mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'ERD' if is_erd else 'JSON' if is_json else 'UML'} "
+                    f"{'Mindmap' if is_mindmap else 'UI mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'ERD' if is_erd else 'JSON' if is_json else 'C4' if is_c4 else 'UML'} "
                     f"rendering failed: {e}"
                 )
                 chat_history = chat_history + [{"role": "error", "content": error_msg}]

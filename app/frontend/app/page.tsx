@@ -46,6 +46,7 @@ import {
 	GANTT_TEMPLATE,
 	ERD_TEMPLATE,
 	JSON_TEMPLATE,
+	C4_TEMPLATE,
 } from '@/constants'
 import { generateUMLAction, renderUMLAction } from '@/actions/uml.action'
 import { generateMindmapAction, renderMindmapAction } from '@/actions/mindmap.action'
@@ -53,6 +54,7 @@ import { generateUIMockupAction, renderUIMockupAction } from '@/actions/ui_mocku
 import { generateGanttAction, renderGanttAction } from '@/actions/gantt.action'
 import { generateERDAction, renderERDAction } from '@/actions/erd.action'
 import { generateJSONAction, renderJSONAction } from '@/actions/json.action'
+import { generateC4Action, renderC4Action } from '@/actions/c4.action'
 import UMLViewer from '@/components/UMLViewer'
 
 type ChatMessage = {
@@ -61,7 +63,7 @@ type ChatMessage = {
 	content: string
 }
 
-type DiagramMode = 'uml' | 'mindmap' | 'ui-mockup' | 'gantt' | 'erd' | 'json'
+type DiagramMode = 'uml' | 'mindmap' | 'ui-mockup' | 'gantt' | 'erd' | 'json' | 'c4'
 
 const createMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const MAX_HISTORY_MESSAGES = 10
@@ -94,7 +96,9 @@ const extractPlantUmlBlock = (code: string | null | undefined, mode: DiagramMode
 					? /@startgantt[\s\S]*@endgantt/i
 					: mode === 'json'
 						? /@startjson[\s\S]*@endjson/i
-						: /@startuml[\s\S]*@enduml/i
+						: mode === 'c4'
+							? /@startuml[\s\S]*@enduml/i
+							: /@startuml[\s\S]*@enduml/i
 	const match = code.match(pattern)
 	return match ? match[0] : null
 }
@@ -117,6 +121,7 @@ const buildPromptDescription = ({
 	const isGantt = mode === 'gantt'
 	const isERD = mode === 'erd'
 	const isJson = mode === 'json'
+	const isC4 = mode === 'c4'
 	const outputFence = isMindmap
 		? '@startmindmap and @endmindmap'
 		: isUIMockup
@@ -125,7 +130,9 @@ const buildPromptDescription = ({
 				? '@startgantt and @endgantt'
 				: isJson
 					? '@startjson and @endjson'
-					: '@startuml and @enduml'
+					: isC4
+						? '@startuml and @enduml with C4-PlantUML includes'
+						: '@startuml and @enduml'
 	const codeLabel = isMindmap
 		? 'Existing PlantUML mindmap (reuse and refine rather than restart):'
 		: isUIMockup
@@ -136,7 +143,9 @@ const buildPromptDescription = ({
 					? 'Existing PlantUML ER diagram (reuse and refine rather than restart):'
 					: isJson
 						? 'Existing PlantUML JSON diagram (reuse and refine rather than restart):'
-						: 'Existing PlantUML (reuse and refine rather than restart):'
+						: isC4
+							? 'Existing PlantUML C4 diagram (reuse and refine rather than restart):'
+							: 'Existing PlantUML (reuse and refine rather than restart):'
 	const emptyLabel = isMindmap
 		? 'No mindmap has been created yet. Create a fresh PlantUML mindmap.'
 		: isUIMockup
@@ -147,7 +156,9 @@ const buildPromptDescription = ({
 					? 'No ER diagram has been created yet. Create a fresh PlantUML ER diagram.'
 					: isJson
 						? 'No JSON diagram has been created yet. Create a fresh PlantUML JSON diagram.'
-						: 'No diagram has been created yet. Create a fresh PlantUML diagram.'
+						: isC4
+							? 'No C4 diagram has been created yet. Create a fresh PlantUML C4 diagram.'
+							: 'No diagram has been created yet. Create a fresh PlantUML diagram.'
 	const descriptionSections = [
 		`Latest user request:\n${latestRequest}`,
 		currentCode ? `${codeLabel}\n${currentCode}` : emptyLabel,
@@ -158,7 +169,7 @@ const buildPromptDescription = ({
 	const composedDescription = descriptionSections.join('\n\n')
 
 	return [
-		`You are an expert ${isMindmap ? 'mindmap' : isUIMockup ? 'UI mockup' : isGantt ? 'Gantt' : isERD ? 'ERD' : isJson ? 'JSON' : 'UML'} assistant following the prompty template rules.`,
+		`You are an expert ${isMindmap ? 'mindmap' : isUIMockup ? 'UI mockup' : isGantt ? 'Gantt' : isERD ? 'ERD' : isJson ? 'JSON' : isC4 ? 'C4' : 'UML'} assistant following the prompty template rules.`,
 		`Diagram Type: ${diagramType}`,
 		`Generate valid PlantUML enclosed between ${outputFence} with concise, professional notation. No extra prose or markdown fences.`,
 		composedDescription,
@@ -197,6 +208,10 @@ export default function UMLGenerator() {
 	const [jsonImage, setJsonImage] = useState('')
 	const [jsonHistory, setJsonHistory] = useState<ChatMessage[]>([])
 	const [jsonErrorMsg, setJsonErrorMsg] = useState<string | null>(null)
+	const [c4Code, setC4Code] = useState(C4_TEMPLATE)
+	const [c4Image, setC4Image] = useState('')
+	const [c4History, setC4History] = useState<ChatMessage[]>([])
+	const [c4ErrorMsg, setC4ErrorMsg] = useState<string | null>(null)
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isDarkMode, setIsDarkMode] = useState(false)
@@ -657,56 +672,137 @@ export default function UMLGenerator() {
 			return
 		}
 
-		const pendingHistory = [...jsonHistory, userMessage]
-		setJsonHistory(pendingHistory)
+		if (activeMode === 'json') {
+			const pendingHistory = [...jsonHistory, userMessage]
+			setJsonHistory(pendingHistory)
 
-		try {
-			setIsGenerating(true)
-			setJsonErrorMsg(null)
-			setJsonImage('')
+			try {
+				setIsGenerating(true)
+				setJsonErrorMsg(null)
+				setJsonImage('')
 
-			const historyPrompt = summarizeChatHistory(pendingHistory)
-			const composedDescription = buildPromptDescription({
-				diagramType: 'json',
-				currentCode: jsonCode,
-				chatSummary: historyPrompt,
-				latestRequest: trimmedInput,
-				mode: 'json',
-			})
+				const historyPrompt = summarizeChatHistory(pendingHistory)
+				const composedDescription = buildPromptDescription({
+					diagramType: 'json',
+					currentCode: jsonCode,
+					chatSummary: historyPrompt,
+					latestRequest: trimmedInput,
+					mode: 'json',
+				})
 
-			const result = await generateJSONAction(composedDescription, 'json')
-			if (result.status === 'ok') {
-				const normalizedCode =
-					extractPlantUmlBlock(result.plantuml_code, 'json') ??
-					result.plantuml_code ??
-					jsonCode
-				if (normalizedCode !== jsonCode) {
-					setJsonCode(normalizedCode)
-				}
-				if (result.image_base64) {
-					const nextImage = `data:image/png;base64,${result.image_base64}`
-					setJsonImage(nextImage)
-					setJsonErrorMsg(null)
+				const result = await generateJSONAction(composedDescription, 'json')
+				if (result.status === 'ok') {
+					const normalizedCode =
+						extractPlantUmlBlock(result.plantuml_code, 'json') ??
+						result.plantuml_code ??
+						jsonCode
+					if (normalizedCode !== jsonCode) {
+						setJsonCode(normalizedCode)
+					}
+					if (result.image_base64) {
+						const nextImage = `data:image/png;base64,${result.image_base64}`
+						setJsonImage(nextImage)
+						setJsonErrorMsg(null)
+					} else {
+						const failureMsg = 'JSON diagram rendered without a preview image.'
+						setJsonImage('')
+						setJsonErrorMsg(failureMsg)
+					}
+					setIsRefreshing(false)
+					setJsonHistory(prev => [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'assistant',
+							content:
+								result.message || 'JSON diagram updated. Share your next change request!',
+						},
+					])
 				} else {
-					const failureMsg = 'JSON diagram rendered without a preview image.'
-					setJsonImage('')
+					const failureMsg = result.message || 'Failed to generate JSON diagram'
 					setJsonErrorMsg(failureMsg)
+					setIsRefreshing(false)
+					setJsonHistory(prev => [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'error',
+							content: failureMsg,
+						},
+					])
 				}
+			} catch (error: unknown) {
+				console.error(error)
+				const message =
+					error instanceof Error
+						? error.message || 'Something went wrong/Out of credits'
+						: 'Something went wrong/Out of credits'
+				setJsonErrorMsg(message)
 				setIsRefreshing(false)
 				setJsonHistory(prev => [
 					...prev,
 					{
 						id: createMessageId(),
+						role: 'error',
+						content: message,
+					},
+				])
+			} finally {
+				setIsGenerating(false)
+			}
+			return
+		}
+
+		// C4 Diagram handler (default / fallback)
+		const pendingC4History = [...c4History, userMessage]
+		setC4History(pendingC4History)
+		try {
+			setIsGenerating(true)
+			setC4ErrorMsg(null)
+			setC4Image('')
+
+			const historyPrompt = summarizeChatHistory(pendingC4History)
+			const composedDescription = buildPromptDescription({
+				diagramType: 'C4',
+				currentCode: c4Code,
+				chatSummary: historyPrompt,
+				latestRequest: trimmedInput,
+				mode: 'c4',
+			})
+
+			const result = await generateC4Action(composedDescription, 'C4')
+			if (result.status === 'ok') {
+				const normalizedCode =
+					extractPlantUmlBlock(result.plantuml_code, 'c4') ??
+					result.plantuml_code ??
+					c4Code
+				if (normalizedCode !== c4Code) {
+					setC4Code(normalizedCode)
+				}
+				if (result.image_base64) {
+					const nextImage = `data:image/png;base64,${result.image_base64}`
+					setC4Image(nextImage)
+					setC4ErrorMsg(null)
+				} else {
+					const failureMsg = 'C4 diagram rendered without a preview image.'
+					setC4Image('')
+					setC4ErrorMsg(failureMsg)
+				}
+				setIsRefreshing(false)
+				setC4History(prev => [
+					...prev,
+					{
+						id: createMessageId(),
 						role: 'assistant',
 						content:
-							result.message || 'JSON diagram updated. Share your next change request!',
+							result.message || 'C4 diagram updated. Share your next change request!',
 					},
 				])
 			} else {
-				const failureMsg = result.message || 'Failed to generate JSON diagram'
-				setJsonErrorMsg(failureMsg)
+				const failureMsg = result.message || 'Failed to generate C4 diagram'
+				setC4ErrorMsg(failureMsg)
 				setIsRefreshing(false)
-				setJsonHistory(prev => [
+				setC4History(prev => [
 					...prev,
 					{
 						id: createMessageId(),
@@ -721,9 +817,9 @@ export default function UMLGenerator() {
 				error instanceof Error
 					? error.message || 'Something went wrong/Out of credits'
 					: 'Something went wrong/Out of credits'
-			setJsonErrorMsg(message)
+			setC4ErrorMsg(message)
 			setIsRefreshing(false)
-			setJsonHistory(prev => [
+			setC4History(prev => [
 				...prev,
 				{
 					id: createMessageId(),
@@ -858,7 +954,9 @@ export default function UMLGenerator() {
 						? erdCode
 						: isJsonMode
 							? jsonCode
-							: uiMockupCode
+							: isC4Mode
+								? c4Code
+								: uiMockupCode
 		setIsCopied(true)
 		navigator.clipboard.writeText(textToCopy)
 		setTimeout(() => {
@@ -877,7 +975,9 @@ export default function UMLGenerator() {
 						? erdImage
 						: isJsonMode
 							? jsonImage
-							: uiMockupImage
+							: isC4Mode
+								? c4Image
+								: uiMockupImage
 		const filePrefix = isUmlMode
 			? 'uml'
 			: isMindmapMode
@@ -888,7 +988,9 @@ export default function UMLGenerator() {
 						? 'erd'
 						: isJsonMode
 							? 'json'
-							: 'ui-mockup'
+							: isC4Mode
+								? 'c4-diagram'
+								: 'ui-mockup'
 		if (!currentImage) {
 			return
 		}
@@ -941,6 +1043,7 @@ export default function UMLGenerator() {
 	}
 
 	const handleManualUpdate = () => {
+		const isC4Mode = activeMode === 'c4'
 		const currentCode = isUmlMode
 			? umlCode
 			: isMindmapMode
@@ -951,7 +1054,9 @@ export default function UMLGenerator() {
 						? erdCode
 						: isJsonMode
 							? jsonCode
-							: uiMockupCode
+							: isC4Mode
+								? c4Code
+								: uiMockupCode
 		if (!currentCode.trim()) {
 			return
 		}
@@ -967,6 +1072,8 @@ export default function UMLGenerator() {
 			setErdErrorMsg(null)
 		} else if (isJsonMode) {
 			setJsonErrorMsg(null)
+		} else if (isC4Mode) {
+			setC4ErrorMsg(null)
 		} else {
 			setUIMockupErrorMsg(null)
 		}
@@ -981,7 +1088,9 @@ export default function UMLGenerator() {
 							? renderERDAction
 							: isJsonMode
 								? renderJSONAction
-								: renderUIMockupAction
+								: isC4Mode
+									? renderC4Action
+									: renderUIMockupAction
 		renderAction(currentCode)
 			.then(result => {
 				if (result.status === 'ok') {
@@ -1004,6 +1113,9 @@ export default function UMLGenerator() {
 						} else if (isJsonMode) {
 							setJsonImage(nextImage)
 							setJsonErrorMsg(null)
+						} else if (isC4Mode) {
+							setC4Image(nextImage)
+							setC4ErrorMsg(null)
 						} else {
 							setUIMockupImage(nextImage)
 							setUIMockupErrorMsg(null)
@@ -1020,7 +1132,9 @@ export default function UMLGenerator() {
 										? 'ER diagram rendered without a preview image.'
 										: isJsonMode
 											? 'JSON diagram rendered without a preview image.'
-											: 'UI mockup rendered without a preview image.'
+											: isC4Mode
+												? 'C4 diagram rendered without a preview image.'
+												: 'UI mockup rendered without a preview image.'
 						if (isUmlMode) {
 							setImage('')
 							setImageByType(prev => ({ ...prev, [diagramType]: '' }))
@@ -1038,6 +1152,9 @@ export default function UMLGenerator() {
 						} else if (isJsonMode) {
 							setJsonImage('')
 							setJsonErrorMsg(failureMsg)
+						} else if (isC4Mode) {
+							setC4Image('')
+							setC4ErrorMsg(failureMsg)
 						} else {
 							setUIMockupImage('')
 							setUIMockupErrorMsg(failureMsg)
@@ -1056,7 +1173,9 @@ export default function UMLGenerator() {
 								? 'Failed to render ER diagram'
 								: isJsonMode
 									? 'Failed to render JSON diagram'
-									: 'Failed to render UI mockup')
+									: isC4Mode
+										? 'Failed to render C4 diagram'
+										: 'Failed to render UI mockup')
 					if (isUmlMode) {
 						setErrorMsg(failureMsg)
 						setErrorByType(prev => ({ ...prev, [diagramType]: failureMsg }))
@@ -1068,6 +1187,8 @@ export default function UMLGenerator() {
 						setErdErrorMsg(failureMsg)
 					} else if (isJsonMode) {
 						setJsonErrorMsg(failureMsg)
+					} else if (isC4Mode) {
+						setC4ErrorMsg(failureMsg)
 					} else {
 						setUIMockupErrorMsg(failureMsg)
 					}
@@ -1089,6 +1210,8 @@ export default function UMLGenerator() {
 					setErdErrorMsg(message)
 				} else if (isJsonMode) {
 					setJsonErrorMsg(message)
+				} else if (isC4Mode) {
+					setC4ErrorMsg(message)
 				} else {
 					setUIMockupErrorMsg(message)
 				}
@@ -1104,6 +1227,7 @@ export default function UMLGenerator() {
 	const isGanttMode = activeMode === 'gantt'
 	const isERDMode = activeMode === 'erd'
 	const isJsonMode = activeMode === 'json'
+	const isC4Mode = activeMode === 'c4'
 	const currentCode = isUmlMode
 		? umlCode
 		: isMindmapMode
@@ -1114,7 +1238,9 @@ export default function UMLGenerator() {
 					? erdCode
 					: isJsonMode
 						? jsonCode
-						: uiMockupCode
+						: isC4Mode
+							? c4Code
+							: uiMockupCode
 	const currentImage = isUmlMode
 		? image
 		: isMindmapMode
@@ -1125,7 +1251,9 @@ export default function UMLGenerator() {
 					? erdImage
 					: isJsonMode
 						? jsonImage
-						: uiMockupImage
+						: isC4Mode
+							? c4Image
+							: uiMockupImage
 	const currentError = isUmlMode
 		? errorMsg
 		: isMindmapMode
@@ -1136,7 +1264,9 @@ export default function UMLGenerator() {
 					? erdErrorMsg
 					: isJsonMode
 						? jsonErrorMsg
-						: uiMockupErrorMsg
+						: isC4Mode
+							? c4ErrorMsg
+							: uiMockupErrorMsg
 	const currentHistory = isUmlMode
 		? chatHistory
 		: isMindmapMode
@@ -1147,7 +1277,9 @@ export default function UMLGenerator() {
 					? erdHistory
 					: isJsonMode
 						? jsonHistory
-						: uiMockupHistory
+						: isC4Mode
+							? c4History
+							: uiMockupHistory
 	const editorTitle = isUmlMode
 		? 'PlantUML Code'
 		: isMindmapMode
@@ -1158,7 +1290,9 @@ export default function UMLGenerator() {
 					? 'ERD Code'
 					: isJsonMode
 						? 'JSON Code'
-						: 'SALT Mockup Code'
+						: isC4Mode
+							? 'C4 Diagram Code'
+							: 'SALT Mockup Code'
 	const syntaxLabel = isUmlMode
 		? 'PlantUML'
 		: isMindmapMode
@@ -1169,7 +1303,9 @@ export default function UMLGenerator() {
 					? 'PlantUML ERD'
 					: isJsonMode
 						? 'PlantUML JSON'
-						: 'PlantUML SALT'
+						: isC4Mode
+							? 'PlantUML C4'
+							: 'PlantUML SALT'
 	const assistantTitle = isUmlMode
 		? 'UML Chat Assistant'
 		: isMindmapMode
@@ -1180,7 +1316,9 @@ export default function UMLGenerator() {
 					? 'ERD Assistant'
 					: isJsonMode
 						? 'JSON Assistant'
-						: 'UI Mockup Assistant'
+						: isC4Mode
+							? 'C4 Diagram Assistant'
+							: 'UI Mockup Assistant'
 	const emptyChatMessage = isUmlMode
 		? 'No messages yet. Describe a system or ask for a change to get started.'
 		: isMindmapMode
@@ -1191,7 +1329,9 @@ export default function UMLGenerator() {
 					? 'No messages yet. Describe a data model or ask for a change to get started.'
 					: isJsonMode
 						? 'No messages yet. Describe JSON or ask for a change to get started.'
-						: 'No messages yet. Describe a screen or ask for a change to get started.'
+						: isC4Mode
+							? 'No messages yet. Describe your system architecture or ask for a change to get started.'
+							: 'No messages yet. Describe a screen or ask for a change to get started.'
 	const tips = isUmlMode
 		? [
 				'Switch templates to explore available UML diagram types',
@@ -1237,6 +1377,15 @@ export default function UMLGenerator() {
 								'Fine-tune the JSON code directly in the editor',
 								'Refresh the page to wipe memory',
 							]
+						: isC4Mode
+							? [
+									'Specify the C4 level: Context, Container, Component, or Code',
+									'Describe systems, containers, and their relationships',
+									'Include technology labels for containers and components',
+									'Use boundaries to group related elements',
+									'Fine-tune the C4 code directly in the editor',
+									'Refresh the page to wipe memory',
+								]
 					: [
 							'Describe the primary screen and its sections',
 							'Call out forms, buttons, lists, and menus',
@@ -1308,6 +1457,7 @@ export default function UMLGenerator() {
 								<TabsTrigger value="gantt">Gantt</TabsTrigger>
 								<TabsTrigger value="erd">ERD</TabsTrigger>
 								<TabsTrigger value="json">JSON</TabsTrigger>
+								<TabsTrigger value="c4">C4 Diagram</TabsTrigger>
 							</TabsList>
 						</Tabs>
 					</div>
@@ -1396,6 +1546,25 @@ export default function UMLGenerator() {
 											<p className="text-sm text-muted-foreground">
 												Describe or paste JSON to visualize it as a PlantUML JSON diagram.
 											</p>
+										</div>
+									) : isC4Mode ? (
+										<div>
+											<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
+												<LayoutTemplate className="h-4 w-4 text-primary" />
+												C4 Diagram Mode
+											</h3>
+											<p className="text-sm text-muted-foreground">
+												Describe your system architecture. Specify the C4 level (Context, Container, Component, or Code) in your description for best results.
+											</p>
+											<div className="mt-3 p-3 bg-muted/50 rounded-md">
+												<p className="text-xs font-medium mb-1">C4 Levels:</p>
+												<ul className="text-xs text-muted-foreground space-y-1">
+													<li>&bull; <strong>Context</strong>: System in its environment</li>
+													<li>&bull; <strong>Container</strong>: High-level tech building blocks</li>
+													<li>&bull; <strong>Component</strong>: Components within containers</li>
+													<li>&bull; <strong>Code</strong>: Implementation details</li>
+												</ul>
+											</div>
 										</div>
 									) : (
 										<div>
@@ -1526,7 +1695,9 @@ export default function UMLGenerator() {
 																? 'Update ERD'
 																: isJsonMode
 																	? 'Update JSON'
-																	: 'Update Mockup'}
+																	: isC4Mode
+																		? 'Update C4'
+																		: 'Update Mockup'}
 											</>
 										)}
 									</Button>
@@ -1572,7 +1743,9 @@ export default function UMLGenerator() {
 																			? setErdCode(e.target.value)
 																			: isJsonMode
 																				? setJsonCode(e.target.value)
-																				: setUIMockupCode(e.target.value)
+																				: isC4Mode
+																					? setC4Code(e.target.value)
+																					: setUIMockupCode(e.target.value)
 														}
 														className="font-mono h-full border-0 focus-visible:ring-0 resize-none"
 												/>
@@ -1637,7 +1810,9 @@ export default function UMLGenerator() {
 																			? setErdCode(e.target.value)
 																			: isJsonMode
 																				? setJsonCode(e.target.value)
-																				: setUIMockupCode(e.target.value)
+																				: isC4Mode
+																					? setC4Code(e.target.value)
+																					: setUIMockupCode(e.target.value)
 														}
 														className="font-mono h-full border-0 focus-visible:ring-0 resize-none"
 													/>
