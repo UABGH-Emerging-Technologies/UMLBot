@@ -4,14 +4,17 @@ SHELL = /bin/bash
 .PHONY: help
 help:
     @echo "Commands:"
-    @echo "venv    : creates a virtual environment."
-    @echo "style   : executes style formatting."
-    @echo "clean   : cleans all unnecessary files."
-    @echo "docs    : builds documentation with mkdocs."
-    @echo "docs-serve: serves the documentation locally."
-    @echo "plantuml-up   : starts local PlantUML server via docker compose."
+    @echo "venv          : creates a virtual environment."
+    @echo "style         : executes style formatting."
+    @echo "clean         : cleans all unnecessary files."
+    @echo "docs          : builds documentation with mkdocs."
+    @echo "plantuml-up   : starts standalone PlantUML server container (dev)."
     @echo "plantuml-logs : tails PlantUML server logs."
-    @echo "plantuml-down : stops PlantUML server and related services."
+    @echo "plantuml-down : stops standalone PlantUML server container."
+    @echo "docker-build  : builds the unified single-container image."
+    @echo "docker-up     : starts the full stack (single container)."
+    @echo "docker-down   : stops the full stack."
+    @echo "docker-logs   : tails full-stack logs."
 # Styling
 .PHONY: style
 style:
@@ -40,17 +43,35 @@ npm-build:
 npm-dev:
 	cd app/frontend && npm run dev
 
+# Local PlantUML server (standalone, for development without Docker)
 .PHONY: plantuml-up
 plantuml-up:
-	docker compose up -d plantuml
+	docker run -d --name umlbot-plantuml -p 8080:8080 --restart unless-stopped plantuml/plantuml-server:jetty
 
 .PHONY: plantuml-down
 plantuml-down:
-	docker compose down
+	docker rm -f umlbot-plantuml 2>/dev/null || true
 
 .PHONY: plantuml-logs
 plantuml-logs:
-	docker compose logs -f plantuml
+	docker logs -f umlbot-plantuml
+
+# Full-stack single container
+.PHONY: docker-build
+docker-build:
+	docker compose build
+
+.PHONY: docker-up
+docker-up:
+	docker compose up -d
+
+.PHONY: docker-down
+docker-down:
+	docker compose down
+
+.PHONY: docker-logs
+docker-logs:
+	docker compose logs -f
 
 .PHONY: test
 test:

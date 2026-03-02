@@ -123,13 +123,14 @@ class UMLBotConfig:
     DIAGRAM_SUCCESS_MSG = "Diagram generated successfully using LLM."
     _DEFAULT_PLANTUML_TEMPLATE = "http://localhost:8080/png/{encoded}"
     _RUNNING_IN_DOCKER = Path("/.dockerenv").exists()
-    if _RUNNING_IN_DOCKER:
+    _SINGLE_CONTAINER = os.getenv("UMLBOT_SINGLE_CONTAINER", "").lower() in ("1", "true", "yes")
+    if _RUNNING_IN_DOCKER and not _SINGLE_CONTAINER:
         _DEFAULT_PLANTUML_TEMPLATE = "http://plantuml:8080/png/{encoded}"
     PLANTUML_SERVER_URL_TEMPLATE = os.getenv(
         "UMLBOT_PLANTUML_SERVER_URL_TEMPLATE",
         _DEFAULT_PLANTUML_TEMPLATE,
     )
-    if _RUNNING_IN_DOCKER and PLANTUML_SERVER_URL_TEMPLATE.startswith(
+    if _RUNNING_IN_DOCKER and not _SINGLE_CONTAINER and PLANTUML_SERVER_URL_TEMPLATE.startswith(
         ("http://localhost:8080", "http://127.0.0.1:8080")
     ):
         PLANTUML_SERVER_URL_TEMPLATE = PLANTUML_SERVER_URL_TEMPLATE.replace(
