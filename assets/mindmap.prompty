@@ -28,7 +28,7 @@ attributes:
 ---
 prompt:
   template: |
-    You are an expert mind map generator with particular expertise with clinical and engineering contexts. Your task is to convert the provided description into a PlantUML mindmap.
+    You are an expert mindmap generator for clinical and engineering contexts. Your task is to convert the provided description into a PlantUML mindmap.
 
     **Diagram Type:** {{ diagram_type }}
 
@@ -41,8 +41,8 @@ prompt:
 
     **Instructions:**
     - Generate a valid PlantUML mindmap.
-    - Use concise, professional node labels suitable for technical documentation.
-    - Use clear hierarchy with `*`, `**`, `***` levels.
+    - Use a single root node with hierarchical bullet levels (`*`, `**`, `***`).
+    - Use concise, professional labels suitable for technical documentation.
     - If the theme is provided, include the appropriate PlantUML theme directive.
     - Do not include any explanatory text, only the PlantUML code block.
     - Ensure the mindmap is clear, accurate, and suitable for clinical/engineering review.

@@ -14,11 +14,14 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 
 from UMLBot.config.config import UMLBotConfig
-from UMLBot.uml_draft_handler import UMLDraftHandler
-from UMLBot.mindmap_draft_handler import MindmapDraftHandler
-from UMLBot.ui_mockup_draft_handler import UIMockupDraftHandler
-from UMLBot.gantt_draft_handler import GanttDraftHandler
-from UMLBot.er_draft_handler import ERDraftHandler
+from UMLBot.diagram_handlers import (
+    ERDraftHandler,
+    GanttDraftHandler,
+    JsonDraftHandler,
+    MindmapDraftHandler,
+    UIMockupDraftHandler,
+    UMLDraftHandler,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -133,6 +136,26 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_ERD_TEMPLATE,
             failure_log="LLM-backed ERD generation failed, returning fallback diagram.",
+        )
+
+    def generate_json_from_description(
+        self,
+        description: str,
+        diagram_type: str = "json",
+        theme: Optional[str] = None,
+    ) -> DiagramGenerationResult:
+        """
+        Runs the JsonDraftHandler pipeline and returns the PlantUML JSON code plus the rendered image.
+        Errors are converted to a fallback JSON stub with contextual messaging.
+        """
+        handler = JsonDraftHandler()
+        return self._generate_from_description(
+            handler=handler,
+            description=description,
+            diagram_type=diagram_type,
+            theme=theme,
+            fallback_template=UMLBotConfig.FALLBACK_JSON_TEMPLATE,
+            failure_log="LLM-backed JSON generation failed, returning fallback diagram.",
         )
 
     def render_diagram_from_code(self, plantuml_code: str) -> Tuple[Image.Image, str, str]:

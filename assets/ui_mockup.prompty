@@ -40,7 +40,8 @@ prompt:
     {{ description }}
 
     **Instructions:**
-    - Generate a valid PlantUML SALT mockup using @startsalt / @endsalt.
+    - Generate a valid PlantUML SALT mockup.
+    - Use a SALT window block (curly-brace container) and standard SALT widgets (buttons, inputs, checkboxes, radios).
     - Use concise, professional labels suitable for technical documentation.
     - Lay out forms, panels, buttons, inputs, and menus clearly.
     - If the theme is provided, include the appropriate PlantUML theme directive (only if supported for SALT).

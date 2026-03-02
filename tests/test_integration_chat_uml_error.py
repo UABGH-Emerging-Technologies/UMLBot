@@ -5,7 +5,7 @@ Mocks UI/user input and verifies end-to-end error handling and revision workflow
 
 import pytest
 from unittest.mock import Mock
-from UMLBot.uml_draft_handler import UMLDraftHandler
+from UMLBot.diagram_handlers.uml_draft_handler import UMLDraftHandler
 from UMLBot.config.config import UMLBotConfig
 from llm_utils.aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
 
@@ -63,7 +63,7 @@ def test_chat_uml_revision_with_error_handler(monkeypatch):
 
     def operation():
         try:
-            from UMLBot.uml_draft_handler import UMLRetryManager
+            from UMLBot.diagram_handlers.uml_draft_handler import UMLRetryManager
 
             return handler.process(
                 "class",
@@ -109,7 +109,7 @@ def test_integration_respects_retry_limit(monkeypatch):
 
     def operation():
         try:
-            from UMLBot.uml_draft_handler import UMLRetryManager
+            from UMLBot.diagram_handlers.uml_draft_handler import UMLRetryManager
 
             return handler.process(
                 "class",

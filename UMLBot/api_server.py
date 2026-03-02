@@ -22,6 +22,7 @@ def create_api_app(
     ui_mockup_generate_fn: Callable[[str, str, str | None], "DiagramGenerationResult"] | None = None,
     gantt_generate_fn: Callable[[str, str, str | None], "DiagramGenerationResult"] | None = None,
     erd_generate_fn: Callable[[str, str, str | None], "DiagramGenerationResult"] | None = None,
+    json_generate_fn: Callable[[str, str, str | None], "DiagramGenerationResult"] | None = None,
     service: DiagramService | None = None,
 ) -> FastAPI:
     """Builds the FastAPI application exposing JSON endpoints for diagram generation."""
@@ -36,6 +37,8 @@ def create_api_app(
         gantt_generate_fn = diagram_service.generate_gantt_from_description
     if erd_generate_fn is None:
         erd_generate_fn = diagram_service.generate_erd_from_description
+    if json_generate_fn is None:
+        json_generate_fn = diagram_service.generate_json_from_description
 
     api_app = FastAPI(title="UMLBot HTTP API")
     api_app.add_middleware(
@@ -415,6 +418,81 @@ def create_api_app(
             }
         except Exception:
             logging.exception("Unhandled exception in /api/erd/render")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": "Internal server error"},
+            )
+
+    @api_app.post("/api/json/generate")
+    async def json_generate_endpoint(request: Request):
+        """Handle JSON diagram generation requests from the frontend."""
+        try:
+            data = await request.json()
+            description = data.get("description")
+            diagram_type = data.get("diagram_type") or "json"
+            theme = data.get("theme")
+
+            if not description:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "message": "Missing required field: description",
+                    },
+                )
+
+            result = json_generate_fn(description, diagram_type, theme)
+            if not result.plantuml_code:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "message": result.status_message or "Generation failed",
+                    },
+                )
+
+            image_base64 = diagram_service.diagram_image_to_base64(result.pil_image)
+            return {
+                "status": "ok",
+                "plantuml_code": result.plantuml_code,
+                "image_base64": image_base64,
+                "image_url": result.image_url,
+                "message": result.status_message,
+            }
+        except Exception:
+            logging.exception("Unhandled exception in /api/json/generate")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": "Internal server error"},
+            )
+
+    @api_app.post("/api/json/render")
+    async def json_render_endpoint(request: Request):
+        """Render a PlantUML JSON snippet into an image for client previews."""
+        try:
+            data = await request.json()
+            plantuml_code = data.get("plantuml_code") or data.get("code")
+            if not plantuml_code:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "message": "Missing required field: plantuml_code",
+                    },
+                )
+
+            pil_image, status_msg, image_url = diagram_service.render_diagram_from_code(
+                plantuml_code
+            )
+            image_base64 = diagram_service.diagram_image_to_base64(pil_image)
+            return {
+                "status": "ok",
+                "image_base64": image_base64,
+                "image_url": image_url,
+                "message": status_msg,
+            }
+        except Exception:
+            logging.exception("Unhandled exception in /api/json/render")
             return JSONResponse(
                 status_code=500,
                 content={"status": "error", "message": "Internal server error"},

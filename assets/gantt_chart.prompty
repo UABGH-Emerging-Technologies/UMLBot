@@ -40,9 +40,10 @@ prompt:
     {{ description }}
 
     **Instructions:**
-    - Generate a valid PlantUML Gantt chart using @startgantt / @endgantt.
-    - Use concise, professional task labels and dates or durations.
-    - Include dependencies when specified.
+    - Generate a valid PlantUML Gantt chart.
+    - Use a project start line and tasks with dates or durations.
+    - Include dependencies when specified (e.g., task starts at another task's end).
+    - Use concise, professional task labels.
     - If the theme is provided, include the appropriate PlantUML theme directive (only if supported for Gantt).
     - Do not include any explanatory text, only the PlantUML code block.
     - Ensure the chart is clear and suitable for clinical/engineering review.

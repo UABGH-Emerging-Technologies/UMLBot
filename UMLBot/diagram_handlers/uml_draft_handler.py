@@ -77,7 +77,7 @@ class UMLDraftHandler(WorkflowHandler):
         """Initialize the handler with optional configuration overrides."""
         super().__init__()
         self.prompty_path = (
-            Path(__file__).resolve().parent.parent / "assets" / "uml_diagram.prompty"
+            Path(__file__).resolve().parents[2] / "assets" / "uml_diagram.prompty"
         )
         self.config = config or UMLBotConfig()
 

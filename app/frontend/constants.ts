@@ -152,23 +152,30 @@ Project starts 2026-01-01
 @endgantt`
 
 export const ERD_TEMPLATE = `@startchen
-
-entity "Customer" as CUSTOMER {
-  "customer number" as Number <<key>>
-  "member bonus" as Bonus <<derived>>
-  "first and last names" as Name <<multi>>
+entity PERSON {
+  ID <<key>>
+  FirstName
+  LastName
+  BirthDate
 }
 
-entity "Movie" as MOVIE {
-  "barcode" as Code
+entity CITY {
+  Name <<key>>
+  Country
 }
 
-relationship "was-rented-to" as RENTED_TO {
-  "date rented" as Date
+relationship BORN_IN {
+  Since
 }
 
-RENTED_TO -1- CUSTOMER
-RENTED_TO -N- MOVIE
+PERSON -N- BORN_IN
+BORN_IN -1- CITY
 
-@endchen
-`
+@endchen`
+
+export const JSON_TEMPLATE = `@startjson
+{
+  "project": "UMLBot",
+  "features": ["uml", "mindmap", "mockup", "gantt", "erd", "json"]
+}
+@endjson`

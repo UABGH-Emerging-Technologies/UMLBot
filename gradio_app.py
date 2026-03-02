@@ -22,10 +22,15 @@ sys.path.append(str(repo_root))
 from UMLBot.api_server import create_api_app
 from UMLBot.config.config import UMLBotConfig
 from UMLBot.services import DiagramService
-from UMLBot.uml_draft_handler import UMLDraftHandler
-from UMLBot.ui_mockup_draft_handler import UIMockupDraftHandler
-from UMLBot.gantt_draft_handler import GanttDraftHandler
-from UMLBot.er_draft_handler import ERDraftHandler
+from UMLBot.diagram_handlers import (
+    ERDraftHandler,
+    GanttDraftHandler,
+    JsonDraftHandler,
+    MindmapDraftHandler,
+    UIMockupDraftHandler,
+    UMLDraftHandler,
+    UMLRetryManager,
+)
 from llm_utils.aiweb_common.generate.ChatResponse import ChatResponseHandler
 
 
@@ -36,7 +41,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
     gr.Markdown("## UML Chat Interface")
     with gr.Row():
         output_mode_dropdown = gr.Dropdown(
-            choices=["UML Diagram", "UI Mockup (SALT)", "Gantt Chart", "ER Diagram"],
+            choices=["UML Diagram", "Mindmap", "UI Mockup (SALT)", "Gantt Chart", "ER Diagram", "JSON"],
             value="UML Diagram",
             label="Output Mode",
             interactive=True,
@@ -141,6 +146,25 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
             raise ValueError("No valid SALT block found in response.")
         return valid_blocks[-1]
 
+    def extract_last_mindmap_block(text: str) -> str:
+        code_block_pattern = re.compile(r"```(?:plantuml)?\s*([\s\S]*?)```", re.MULTILINE)
+        blocks = code_block_pattern.findall(text)
+        mindmap_pattern = re.compile(r"@startmindmap[\s\S]*?@endmindmap", re.MULTILINE)
+        blocks += mindmap_pattern.findall(text)
+
+        valid_blocks = []
+        for block in blocks:
+            block_stripped = block.strip()
+            block_stripped = re.sub(
+                r"^```(?:plantuml)?\s*|```$", "", block_stripped, flags=re.MULTILINE
+            ).strip()
+            if "@startmindmap" in block_stripped and "@endmindmap" in block_stripped:
+                valid_blocks.append(block_stripped)
+
+        if not valid_blocks:
+            raise ValueError("No valid mindmap block found in response.")
+        return valid_blocks[-1]
+
     def extract_last_gantt_block(text: str) -> str:
         code_block_pattern = re.compile(r"```(?:plantuml)?\s*([\s\S]*?)```", re.MULTILINE)
         blocks = code_block_pattern.findall(text)
@@ -158,6 +182,25 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
 
         if not valid_blocks:
             raise ValueError("No valid Gantt block found in response.")
+        return valid_blocks[-1]
+
+    def extract_last_json_block(text: str) -> str:
+        code_block_pattern = re.compile(r"```(?:plantuml)?\s*([\s\S]*?)```", re.MULTILINE)
+        blocks = code_block_pattern.findall(text)
+        json_pattern = re.compile(r"@startjson[\s\S]*?@endjson", re.MULTILINE)
+        blocks += json_pattern.findall(text)
+
+        valid_blocks = []
+        for block in blocks:
+            block_stripped = block.strip()
+            block_stripped = re.sub(
+                r"^```(?:plantuml)?\s*|```$", "", block_stripped, flags=re.MULTILINE
+            ).strip()
+            if "@startjson" in block_stripped and "@endjson" in block_stripped:
+                valid_blocks.append(block_stripped)
+
+        if not valid_blocks:
+            raise ValueError("No valid JSON block found in response.")
         return valid_blocks[-1]
 
     def on_chat_submit(user_input, chat_history, plantuml_code_text, diagram_type, output_mode):
@@ -181,27 +224,33 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         safe_plantuml_code = escape_curly(plantuml_code_text.strip())
         # Add user suggestion
         chat_history = chat_history + [{"role": "user", "content": user_input}]
+        is_mindmap = output_mode == "Mindmap"
         is_ui_mockup = output_mode == "UI Mockup (SALT)"
         is_gantt = output_mode == "Gantt Chart"
         is_erd = output_mode == "ER Diagram"
+        is_json = output_mode == "JSON"
         effective_type = (
-            "salt"
+            "mindmap"
+            if is_mindmap
+            else "salt"
             if is_ui_mockup
             else "gantt"
             if is_gantt
             else "ERD"
             if is_erd
+            else "json"
+            if is_json
             else diagram_type
         )
         system_msg = (
-            f"{'Mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'ERD' if is_erd else 'Diagram'} type: {effective_type}\n"
+            f"{'Mindmap' if is_mindmap else 'Mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'ERD' if is_erd else 'JSON' if is_json else 'Diagram'} type: {effective_type}\n"
             f"User request: {safe_user_input}\n"
             f"Current PlantUML code:\n"
             "```plantuml\n"
             f"{safe_plantuml_code}\n"
             "```\n"
             "Please return only the updated PlantUML code between "
-            f"{'@startsalt and @endsalt' if is_ui_mockup else '@startgantt and @endgantt' if is_gantt else '@startuml and @enduml'}.\n"
+            f"{'@startmindmap and @endmindmap' if is_mindmap else '@startsalt and @endsalt' if is_ui_mockup else '@startgantt and @endgantt' if is_gantt else '@startjson and @endjson' if is_json else '@startuml and @enduml'}.\n"
         )
         chat_history = chat_history + [{"role": "system", "content": system_msg}]
 
@@ -218,12 +267,16 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
                 messages.append({"role": "error", "content": msg["content"]})
 
         # Call the LLM backend with retry logic
-        if is_ui_mockup:
+        if is_mindmap:
+            handler = MindmapDraftHandler()
+        elif is_ui_mockup:
             handler = UIMockupDraftHandler()
         elif is_gantt:
             handler = GanttDraftHandler()
         elif is_erd:
             handler = ERDraftHandler()
+        elif is_json:
+            handler = JsonDraftHandler()
         else:
             handler = UMLDraftHandler()
         handler._init_openai(
@@ -232,8 +285,6 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
             openai_compatible_model=UMLBotConfig.LLM_MODEL,
             name="UMLBot",
         )
-        from UMLBot.uml_draft_handler import UMLRetryManager
-
         retry_manager = UMLRetryManager(max_retries=3)
         raw_response = None
         error_feedback = ""
@@ -245,10 +296,14 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
                 )
                 chat_response = chat_response_handler.generate_response(messages)
                 raw_response = chat_response.response.content
-                if is_ui_mockup:
+                if is_mindmap:
+                    extracted_plantuml = extract_last_mindmap_block(raw_response)
+                elif is_ui_mockup:
                     extracted_plantuml = extract_last_salt_block(raw_response)
                 elif is_gantt:
                     extracted_plantuml = extract_last_gantt_block(raw_response)
+                elif is_json:
+                    extracted_plantuml = extract_last_json_block(raw_response)
                 elif is_erd:
                     extracted_plantuml = extract_last_plantuml_block(raw_response)
                 else:
@@ -261,7 +316,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
                 retry_manager.record_error(e)
                 error_msg = (
                     f"Attempt {attempt}: "
-                    f"{'UI mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'ERD' if is_erd else 'UML'} "
+                    f"{'Mindmap' if is_mindmap else 'UI mockup' if is_ui_mockup else 'Gantt' if is_gantt else 'ERD' if is_erd else 'JSON' if is_json else 'UML'} "
                     f"rendering failed: {e}"
                 )
                 chat_history = chat_history + [{"role": "error", "content": error_msg}]

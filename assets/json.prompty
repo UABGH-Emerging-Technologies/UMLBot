@@ -1,21 +1,21 @@
 ---
-name: ER Diagram Generator
-description: "Converts a user-provided data model description into a PlantUML entity-relationship diagram."
+name: JSON Diagram Generator
+description: "Converts a user-provided JSON structure into a PlantUML JSON diagram for visualization."
 model:
   api: chat
   configuration:
     type: azure_openai
     azure_endpoint: ${UMLBOT_LLM_API_BASE}
   parameters:
-    max_tokens: 5000
+    max_tokens: 3000
     temperature: 0.1
 variables:
   diagram_type:
-    description: "Type of diagram to generate (use 'ERD' or 'entity relationship')."
+    description: "Type of diagram to generate (use 'json')."
     type: string
     required: true
   description:
-    description: "Detailed description of entities, attributes, and relationships to be modeled."
+    description: "The JSON structure or description to visualize."
     type: string
     required: true
   theme:
@@ -23,13 +23,13 @@ variables:
     type: string
     required: false
 attributes:
-  model: gpt-5-mini
+  model: gpt-4o-mini
   template: jinja2
 ---
 prompt:
   template: |
-    You are an expert entity-relationship diagram generator for clinical and engineering contexts. Your task is to convert the provided description into a PlantUML ER diagram.
-    
+    You are an expert JSON diagram generator for clinical and engineering contexts. Your task is to convert the provided description into a PlantUML JSON diagram.
+
     **Diagram Type:** {{ diagram_type }}
 
     {% if theme %}
@@ -40,18 +40,17 @@ prompt:
     {{ description }}
 
     **Instructions:**
-    - Generate a valid PlantUML ER diagram using Chen-style notation.
-    - Use clear entity names and attribute lists.
-    - Show relationships with cardinalities when specified.
+    - Generate a valid PlantUML JSON diagram.
+    - Use valid JSON syntax inside the block.
     - If the theme is provided, include the appropriate PlantUML theme directive.
     - Do not include any explanatory text, only the PlantUML code block.
     - Ensure the diagram is clear, accurate, and suitable for clinical/engineering review.
 
     **Output format:**
     ```
-    @startchen
-    [PlantUML ER diagram code here]
-    @endchen
+    @startjson
+    [JSON data here]
+    @endjson
     ```
 
-    Begin your response with the code block only.
+    Begin your response with the PlantUML code block only.

@@ -45,12 +45,14 @@ import {
 	UI_MOCKUP_TEMPLATE,
 	GANTT_TEMPLATE,
 	ERD_TEMPLATE,
+	JSON_TEMPLATE,
 } from '@/constants'
 import { generateUMLAction, renderUMLAction } from '@/actions/uml.action'
 import { generateMindmapAction, renderMindmapAction } from '@/actions/mindmap.action'
 import { generateUIMockupAction, renderUIMockupAction } from '@/actions/ui_mockup.action'
 import { generateGanttAction, renderGanttAction } from '@/actions/gantt.action'
 import { generateERDAction, renderERDAction } from '@/actions/erd.action'
+import { generateJSONAction, renderJSONAction } from '@/actions/json.action'
 import UMLViewer from '@/components/UMLViewer'
 
 type ChatMessage = {
@@ -59,7 +61,7 @@ type ChatMessage = {
 	content: string
 }
 
-type DiagramMode = 'uml' | 'mindmap' | 'ui-mockup' | 'gantt' | 'erd'
+type DiagramMode = 'uml' | 'mindmap' | 'ui-mockup' | 'gantt' | 'erd' | 'json'
 
 const createMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const MAX_HISTORY_MESSAGES = 10
@@ -90,38 +92,11 @@ const extractPlantUmlBlock = (code: string | null | undefined, mode: DiagramMode
 				? /@startsalt[\s\S]*@endsalt/i
 				: mode === 'gantt'
 					? /@startgantt[\s\S]*@endgantt/i
-					: /@startuml[\s\S]*@enduml/i
+					: mode === 'json'
+						? /@startjson[\s\S]*@endjson/i
+						: /@startuml[\s\S]*@enduml/i
 	const match = code.match(pattern)
 	return match ? match[0] : null
-}
-
-const applyPromptyTemplate = ({
-	template,
-	diagramType,
-	description,
-	theme,
-}: {
-	template: string
-	diagramType: string
-	description: string
-	theme?: string
-}) => {
-	const themeBlockRegex = /\{%\s*if\s+theme\s*%\}[\s\S]*?\{%\s*endif\s*%\}/g
-	let resolved = template
-
-	if (theme) {
-		resolved = resolved
-			.replace(/\{%\s*if\s+theme\s*%\}/g, '')
-			.replace(/\{%\s*endif\s*%\}/g, '')
-			.replace(/\{\{\s*theme\s*\}\}/g, theme)
-	} else {
-		resolved = resolved.replace(themeBlockRegex, '')
-	}
-
-	return resolved
-		.replace(/\{\{\s*diagram_type\s*\}\}/g, diagramType)
-		.replace(/\{\{\s*description\s*\}\}/g, description)
-		.trim()
 }
 
 const buildPromptDescription = ({
@@ -129,27 +104,28 @@ const buildPromptDescription = ({
 	currentCode,
 	chatSummary,
 	latestRequest,
-	promptTemplate,
 	mode,
 }: {
 	diagramType: string
 	currentCode: string
 	chatSummary: string
 	latestRequest: string
-	promptTemplate?: string | null
 	mode: DiagramMode
 }) => {
 	const isMindmap = mode === 'mindmap'
 	const isUIMockup = mode === 'ui-mockup'
 	const isGantt = mode === 'gantt'
 	const isERD = mode === 'erd'
+	const isJson = mode === 'json'
 	const outputFence = isMindmap
 		? '@startmindmap and @endmindmap'
 		: isUIMockup
 			? '@startsalt and @endsalt'
 			: isGantt
 				? '@startgantt and @endgantt'
-				: '@startuml and @enduml'
+				: isJson
+					? '@startjson and @endjson'
+					: '@startuml and @enduml'
 	const codeLabel = isMindmap
 		? 'Existing PlantUML mindmap (reuse and refine rather than restart):'
 		: isUIMockup
@@ -158,7 +134,9 @@ const buildPromptDescription = ({
 				? 'Existing PlantUML Gantt chart (reuse and refine rather than restart):'
 				: isERD
 					? 'Existing PlantUML ER diagram (reuse and refine rather than restart):'
-					: 'Existing PlantUML (reuse and refine rather than restart):'
+					: isJson
+						? 'Existing PlantUML JSON diagram (reuse and refine rather than restart):'
+						: 'Existing PlantUML (reuse and refine rather than restart):'
 	const emptyLabel = isMindmap
 		? 'No mindmap has been created yet. Create a fresh PlantUML mindmap.'
 		: isUIMockup
@@ -167,7 +145,9 @@ const buildPromptDescription = ({
 				? 'No Gantt chart has been created yet. Create a fresh PlantUML Gantt chart.'
 				: isERD
 					? 'No ER diagram has been created yet. Create a fresh PlantUML ER diagram.'
-					: 'No diagram has been created yet. Create a fresh PlantUML diagram.'
+					: isJson
+						? 'No JSON diagram has been created yet. Create a fresh PlantUML JSON diagram.'
+						: 'No diagram has been created yet. Create a fresh PlantUML diagram.'
 	const descriptionSections = [
 		`Latest user request:\n${latestRequest}`,
 		currentCode ? `${codeLabel}\n${currentCode}` : emptyLabel,
@@ -177,16 +157,8 @@ const buildPromptDescription = ({
 
 	const composedDescription = descriptionSections.join('\n\n')
 
-	if (promptTemplate) {
-		return applyPromptyTemplate({
-			template: promptTemplate,
-			diagramType,
-			description: composedDescription,
-		})
-	}
-
 	return [
-		`You are an expert ${isMindmap ? 'mindmap' : isUIMockup ? 'UI mockup' : isGantt ? 'Gantt' : isERD ? 'ERD' : 'UML'} assistant following the prompty template rules.`,
+		`You are an expert ${isMindmap ? 'mindmap' : isUIMockup ? 'UI mockup' : isGantt ? 'Gantt' : isERD ? 'ERD' : isJson ? 'JSON' : 'UML'} assistant following the prompty template rules.`,
 		`Diagram Type: ${diagramType}`,
 		`Generate valid PlantUML enclosed between ${outputFence} with concise, professional notation. No extra prose or markdown fences.`,
 		composedDescription,
@@ -209,26 +181,22 @@ export default function UMLGenerator() {
 	const [mindmapImage, setMindmapImage] = useState('')
 	const [mindmapHistory, setMindmapHistory] = useState<ChatMessage[]>([])
 	const [mindmapErrorMsg, setMindmapErrorMsg] = useState<string | null>(null)
-	const [mindmapPromptTemplate, setMindmapPromptTemplate] = useState<string | null>(
-		null
-	)
 	const [uiMockupCode, setUIMockupCode] = useState(UI_MOCKUP_TEMPLATE)
 	const [uiMockupImage, setUIMockupImage] = useState('')
 	const [uiMockupHistory, setUIMockupHistory] = useState<ChatMessage[]>([])
 	const [uiMockupErrorMsg, setUIMockupErrorMsg] = useState<string | null>(null)
-	const [uiMockupPromptTemplate, setUIMockupPromptTemplate] = useState<string | null>(
-		null
-	)
 	const [ganttCode, setGanttCode] = useState(GANTT_TEMPLATE)
 	const [ganttImage, setGanttImage] = useState('')
 	const [ganttHistory, setGanttHistory] = useState<ChatMessage[]>([])
 	const [ganttErrorMsg, setGanttErrorMsg] = useState<string | null>(null)
-	const [ganttPromptTemplate, setGanttPromptTemplate] = useState<string | null>(null)
 	const [erdCode, setErdCode] = useState(ERD_TEMPLATE)
 	const [erdImage, setErdImage] = useState('')
 	const [erdHistory, setErdHistory] = useState<ChatMessage[]>([])
 	const [erdErrorMsg, setErdErrorMsg] = useState<string | null>(null)
-	const [erdPromptTemplate, setErdPromptTemplate] = useState<string | null>(null)
+	const [jsonCode, setJsonCode] = useState(JSON_TEMPLATE)
+	const [jsonImage, setJsonImage] = useState('')
+	const [jsonHistory, setJsonHistory] = useState<ChatMessage[]>([])
+	const [jsonErrorMsg, setJsonErrorMsg] = useState<string | null>(null)
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isDarkMode, setIsDarkMode] = useState(false)
@@ -239,7 +207,6 @@ export default function UMLGenerator() {
 	const [isCopied, setIsCopied] = useState(false)
 	const [errorMsg, setErrorMsg] = useState<string | null>(null)
 	const [errorByType, setErrorByType] = useState<Record<string, string | null>>({})
-	const [promptTemplate, setPromptTemplate] = useState<string | null>(null)
 
 	// Toggle dark mode
 	useEffect(() => {
@@ -250,35 +217,6 @@ export default function UMLGenerator() {
 		}
 	}, [isDarkMode])
 
-	useEffect(() => {
-		const fetchPromptTemplate = async (
-			endpoint: string,
-			onSuccess: (template: string | null) => void,
-			label: string
-		) => {
-			try {
-				const response = await fetch(endpoint)
-				if (!response.ok) {
-					throw new Error(`Failed to load prompt template: ${response.status}`)
-				}
-				const data = await response.json()
-				if (data.template) {
-					onSuccess(data.template)
-					return
-				}
-				onSuccess(null)
-			} catch (error) {
-				console.error(`Unable to load ${label} prompt template`, error)
-				onSuccess(null)
-			}
-		}
-
-		fetchPromptTemplate('/api/prompts/uml', setPromptTemplate, 'UML')
-		fetchPromptTemplate('/api/prompts/mindmap', setMindmapPromptTemplate, 'mindmap')
-		fetchPromptTemplate('/api/prompts/ui-mockup', setUIMockupPromptTemplate, 'UI mockup')
-		fetchPromptTemplate('/api/prompts/gantt', setGanttPromptTemplate, 'Gantt')
-		fetchPromptTemplate('/api/prompts/erd', setErdPromptTemplate, 'ERD')
-	}, [])
 
 	const handleSendMessage = async () => {
 		const trimmedInput = chatInput.trim()
@@ -308,7 +246,6 @@ export default function UMLGenerator() {
 					currentCode: umlCode,
 					chatSummary: historyPrompt,
 					latestRequest: trimmedInput,
-					promptTemplate,
 					mode: 'uml',
 				})
 
@@ -411,7 +348,6 @@ export default function UMLGenerator() {
 					currentCode: mindmapCode,
 					chatSummary: historyPrompt,
 					latestRequest: trimmedInput,
-					promptTemplate: mindmapPromptTemplate,
 					mode: 'mindmap',
 				})
 
@@ -493,7 +429,6 @@ export default function UMLGenerator() {
 					currentCode: uiMockupCode,
 					chatSummary: historyPrompt,
 					latestRequest: trimmedInput,
-					promptTemplate: uiMockupPromptTemplate,
 					mode: 'ui-mockup',
 				})
 
@@ -575,7 +510,6 @@ export default function UMLGenerator() {
 					currentCode: ganttCode,
 					chatSummary: historyPrompt,
 					latestRequest: trimmedInput,
-					promptTemplate: ganttPromptTemplate,
 					mode: 'gantt',
 				})
 
@@ -642,56 +576,137 @@ export default function UMLGenerator() {
 			return
 		}
 
-		const pendingHistory = [...erdHistory, userMessage]
-		setErdHistory(pendingHistory)
+		if (activeMode === 'erd') {
+			const pendingHistory = [...erdHistory, userMessage]
+			setErdHistory(pendingHistory)
 
-		try {
-			setIsGenerating(true)
-			setErdErrorMsg(null)
-			setErdImage('')
+			try {
+				setIsGenerating(true)
+				setErdErrorMsg(null)
+				setErdImage('')
 
-			const historyPrompt = summarizeChatHistory(pendingHistory)
-			const composedDescription = buildPromptDescription({
-				diagramType: 'ERD',
-				currentCode: erdCode,
-				chatSummary: historyPrompt,
-				latestRequest: trimmedInput,
-				promptTemplate: erdPromptTemplate,
-				mode: 'erd',
-			})
+				const historyPrompt = summarizeChatHistory(pendingHistory)
+				const composedDescription = buildPromptDescription({
+					diagramType: 'ERD',
+					currentCode: erdCode,
+					chatSummary: historyPrompt,
+					latestRequest: trimmedInput,
+					mode: 'erd',
+				})
 
-			const result = await generateERDAction(composedDescription, 'ERD')
-			if (result.status === 'ok') {
-				const normalizedCode =
-					extractPlantUmlBlock(result.plantuml_code, 'erd') ??
-					result.plantuml_code ??
-					erdCode
-				if (normalizedCode !== erdCode) {
-					setErdCode(normalizedCode)
-				}
-				if (result.image_base64) {
-					const nextImage = `data:image/png;base64,${result.image_base64}`
-					setErdImage(nextImage)
-					setErdErrorMsg(null)
+				const result = await generateERDAction(composedDescription, 'ERD')
+				if (result.status === 'ok') {
+					const normalizedCode =
+						extractPlantUmlBlock(result.plantuml_code, 'erd') ??
+						result.plantuml_code ??
+						erdCode
+					if (normalizedCode !== erdCode) {
+						setErdCode(normalizedCode)
+					}
+					if (result.image_base64) {
+						const nextImage = `data:image/png;base64,${result.image_base64}`
+						setErdImage(nextImage)
+						setErdErrorMsg(null)
+					} else {
+						const failureMsg = 'ER diagram rendered without a preview image.'
+						setErdImage('')
+						setErdErrorMsg(failureMsg)
+					}
+					setIsRefreshing(false)
+					setErdHistory(prev => [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'assistant',
+							content:
+								result.message || 'ER diagram updated. Share your next change request!',
+						},
+					])
 				} else {
-					const failureMsg = 'ER diagram rendered without a preview image.'
-					setErdImage('')
+					const failureMsg = result.message || 'Failed to generate ER diagram'
 					setErdErrorMsg(failureMsg)
+					setIsRefreshing(false)
+					setErdHistory(prev => [
+						...prev,
+						{
+							id: createMessageId(),
+							role: 'error',
+							content: failureMsg,
+						},
+					])
 				}
+			} catch (error: unknown) {
+				console.error(error)
+				const message =
+					error instanceof Error
+						? error.message || 'Something went wrong/Out of credits'
+						: 'Something went wrong/Out of credits'
+				setErdErrorMsg(message)
 				setIsRefreshing(false)
 				setErdHistory(prev => [
 					...prev,
 					{
 						id: createMessageId(),
+						role: 'error',
+						content: message,
+					},
+				])
+			} finally {
+				setIsGenerating(false)
+			}
+			return
+		}
+
+		const pendingHistory = [...jsonHistory, userMessage]
+		setJsonHistory(pendingHistory)
+
+		try {
+			setIsGenerating(true)
+			setJsonErrorMsg(null)
+			setJsonImage('')
+
+			const historyPrompt = summarizeChatHistory(pendingHistory)
+			const composedDescription = buildPromptDescription({
+				diagramType: 'json',
+				currentCode: jsonCode,
+				chatSummary: historyPrompt,
+				latestRequest: trimmedInput,
+				mode: 'json',
+			})
+
+			const result = await generateJSONAction(composedDescription, 'json')
+			if (result.status === 'ok') {
+				const normalizedCode =
+					extractPlantUmlBlock(result.plantuml_code, 'json') ??
+					result.plantuml_code ??
+					jsonCode
+				if (normalizedCode !== jsonCode) {
+					setJsonCode(normalizedCode)
+				}
+				if (result.image_base64) {
+					const nextImage = `data:image/png;base64,${result.image_base64}`
+					setJsonImage(nextImage)
+					setJsonErrorMsg(null)
+				} else {
+					const failureMsg = 'JSON diagram rendered without a preview image.'
+					setJsonImage('')
+					setJsonErrorMsg(failureMsg)
+				}
+				setIsRefreshing(false)
+				setJsonHistory(prev => [
+					...prev,
+					{
+						id: createMessageId(),
 						role: 'assistant',
-						content: result.message || 'ER diagram updated. Share your next change request!',
+						content:
+							result.message || 'JSON diagram updated. Share your next change request!',
 					},
 				])
 			} else {
-				const failureMsg = result.message || 'Failed to generate ER diagram'
-				setErdErrorMsg(failureMsg)
+				const failureMsg = result.message || 'Failed to generate JSON diagram'
+				setJsonErrorMsg(failureMsg)
 				setIsRefreshing(false)
-				setErdHistory(prev => [
+				setJsonHistory(prev => [
 					...prev,
 					{
 						id: createMessageId(),
@@ -706,9 +721,9 @@ export default function UMLGenerator() {
 				error instanceof Error
 					? error.message || 'Something went wrong/Out of credits'
 					: 'Something went wrong/Out of credits'
-			setErdErrorMsg(message)
+			setJsonErrorMsg(message)
 			setIsRefreshing(false)
-			setErdHistory(prev => [
+			setJsonHistory(prev => [
 				...prev,
 				{
 					id: createMessageId(),
@@ -750,9 +765,13 @@ export default function UMLGenerator() {
 						? currentCode
 							? 'No ERD preview yet'
 							: 'No ERD available'
-						: currentCode
-							? 'No UI mockup preview yet'
-							: 'No UI mockup available'
+						: isJsonMode
+							? currentCode
+								? 'No JSON preview yet'
+								: 'No JSON diagram available'
+							: currentCode
+								? 'No UI mockup preview yet'
+								: 'No UI mockup available'
 		const altText = isUmlMode
 			? 'UML Diagram Preview'
 			: isMindmapMode
@@ -761,7 +780,9 @@ export default function UMLGenerator() {
 					? 'Gantt Preview'
 					: isERDMode
 						? 'ERD Preview'
-						: 'UI Mockup Preview'
+						: isJsonMode
+							? 'JSON Preview'
+							: 'UI Mockup Preview'
 		return (
 			<UMLViewer
 				umlCode={currentCode}
@@ -835,7 +856,9 @@ export default function UMLGenerator() {
 					? ganttCode
 					: isERDMode
 						? erdCode
-						: uiMockupCode
+						: isJsonMode
+							? jsonCode
+							: uiMockupCode
 		setIsCopied(true)
 		navigator.clipboard.writeText(textToCopy)
 		setTimeout(() => {
@@ -852,7 +875,9 @@ export default function UMLGenerator() {
 					? ganttImage
 					: isERDMode
 						? erdImage
-						: uiMockupImage
+						: isJsonMode
+							? jsonImage
+							: uiMockupImage
 		const filePrefix = isUmlMode
 			? 'uml'
 			: isMindmapMode
@@ -861,7 +886,9 @@ export default function UMLGenerator() {
 					? 'gantt'
 					: isERDMode
 						? 'erd'
-						: 'ui-mockup'
+						: isJsonMode
+							? 'json'
+							: 'ui-mockup'
 		if (!currentImage) {
 			return
 		}
@@ -922,7 +949,9 @@ export default function UMLGenerator() {
 					? ganttCode
 					: isERDMode
 						? erdCode
-						: uiMockupCode
+						: isJsonMode
+							? jsonCode
+							: uiMockupCode
 		if (!currentCode.trim()) {
 			return
 		}
@@ -936,6 +965,8 @@ export default function UMLGenerator() {
 			setGanttErrorMsg(null)
 		} else if (isERDMode) {
 			setErdErrorMsg(null)
+		} else if (isJsonMode) {
+			setJsonErrorMsg(null)
 		} else {
 			setUIMockupErrorMsg(null)
 		}
@@ -948,7 +979,9 @@ export default function UMLGenerator() {
 						? renderGanttAction
 						: isERDMode
 							? renderERDAction
-							: renderUIMockupAction
+							: isJsonMode
+								? renderJSONAction
+								: renderUIMockupAction
 		renderAction(currentCode)
 			.then(result => {
 				if (result.status === 'ok') {
@@ -968,6 +1001,9 @@ export default function UMLGenerator() {
 						} else if (isERDMode) {
 							setErdImage(nextImage)
 							setErdErrorMsg(null)
+						} else if (isJsonMode) {
+							setJsonImage(nextImage)
+							setJsonErrorMsg(null)
 						} else {
 							setUIMockupImage(nextImage)
 							setUIMockupErrorMsg(null)
@@ -980,8 +1016,10 @@ export default function UMLGenerator() {
 									? 'Mindmap rendered without a preview image.'
 									: isGanttMode
 										? 'Gantt chart rendered without a preview image.'
-										: isERDMode
-											? 'ER diagram rendered without a preview image.'
+									: isERDMode
+										? 'ER diagram rendered without a preview image.'
+										: isJsonMode
+											? 'JSON diagram rendered without a preview image.'
 											: 'UI mockup rendered without a preview image.'
 						if (isUmlMode) {
 							setImage('')
@@ -997,6 +1035,9 @@ export default function UMLGenerator() {
 						} else if (isERDMode) {
 							setErdImage('')
 							setErdErrorMsg(failureMsg)
+						} else if (isJsonMode) {
+							setJsonImage('')
+							setJsonErrorMsg(failureMsg)
 						} else {
 							setUIMockupImage('')
 							setUIMockupErrorMsg(failureMsg)
@@ -1011,8 +1052,10 @@ export default function UMLGenerator() {
 								? 'Failed to render mindmap'
 							: isGanttMode
 								? 'Failed to render Gantt chart'
-								: isERDMode
-									? 'Failed to render ER diagram'
+							: isERDMode
+								? 'Failed to render ER diagram'
+								: isJsonMode
+									? 'Failed to render JSON diagram'
 									: 'Failed to render UI mockup')
 					if (isUmlMode) {
 						setErrorMsg(failureMsg)
@@ -1023,6 +1066,8 @@ export default function UMLGenerator() {
 						setGanttErrorMsg(failureMsg)
 					} else if (isERDMode) {
 						setErdErrorMsg(failureMsg)
+					} else if (isJsonMode) {
+						setJsonErrorMsg(failureMsg)
 					} else {
 						setUIMockupErrorMsg(failureMsg)
 					}
@@ -1042,6 +1087,8 @@ export default function UMLGenerator() {
 					setGanttErrorMsg(message)
 				} else if (isERDMode) {
 					setErdErrorMsg(message)
+				} else if (isJsonMode) {
+					setJsonErrorMsg(message)
 				} else {
 					setUIMockupErrorMsg(message)
 				}
@@ -1056,6 +1103,7 @@ export default function UMLGenerator() {
 	const isMindmapMode = activeMode === 'mindmap'
 	const isGanttMode = activeMode === 'gantt'
 	const isERDMode = activeMode === 'erd'
+	const isJsonMode = activeMode === 'json'
 	const currentCode = isUmlMode
 		? umlCode
 		: isMindmapMode
@@ -1064,7 +1112,9 @@ export default function UMLGenerator() {
 				? ganttCode
 				: isERDMode
 					? erdCode
-					: uiMockupCode
+					: isJsonMode
+						? jsonCode
+						: uiMockupCode
 	const currentImage = isUmlMode
 		? image
 		: isMindmapMode
@@ -1073,7 +1123,9 @@ export default function UMLGenerator() {
 				? ganttImage
 				: isERDMode
 					? erdImage
-					: uiMockupImage
+					: isJsonMode
+						? jsonImage
+						: uiMockupImage
 	const currentError = isUmlMode
 		? errorMsg
 		: isMindmapMode
@@ -1082,7 +1134,9 @@ export default function UMLGenerator() {
 				? ganttErrorMsg
 				: isERDMode
 					? erdErrorMsg
-					: uiMockupErrorMsg
+					: isJsonMode
+						? jsonErrorMsg
+						: uiMockupErrorMsg
 	const currentHistory = isUmlMode
 		? chatHistory
 		: isMindmapMode
@@ -1091,7 +1145,9 @@ export default function UMLGenerator() {
 				? ganttHistory
 				: isERDMode
 					? erdHistory
-					: uiMockupHistory
+					: isJsonMode
+						? jsonHistory
+						: uiMockupHistory
 	const editorTitle = isUmlMode
 		? 'PlantUML Code'
 		: isMindmapMode
@@ -1100,7 +1156,9 @@ export default function UMLGenerator() {
 				? 'Gantt Code'
 				: isERDMode
 					? 'ERD Code'
-					: 'SALT Mockup Code'
+					: isJsonMode
+						? 'JSON Code'
+						: 'SALT Mockup Code'
 	const syntaxLabel = isUmlMode
 		? 'PlantUML'
 		: isMindmapMode
@@ -1109,7 +1167,9 @@ export default function UMLGenerator() {
 				? 'PlantUML Gantt'
 				: isERDMode
 					? 'PlantUML ERD'
-					: 'PlantUML SALT'
+					: isJsonMode
+						? 'PlantUML JSON'
+						: 'PlantUML SALT'
 	const assistantTitle = isUmlMode
 		? 'UML Chat Assistant'
 		: isMindmapMode
@@ -1118,7 +1178,9 @@ export default function UMLGenerator() {
 				? 'Gantt Assistant'
 				: isERDMode
 					? 'ERD Assistant'
-					: 'UI Mockup Assistant'
+					: isJsonMode
+						? 'JSON Assistant'
+						: 'UI Mockup Assistant'
 	const emptyChatMessage = isUmlMode
 		? 'No messages yet. Describe a system or ask for a change to get started.'
 		: isMindmapMode
@@ -1127,7 +1189,9 @@ export default function UMLGenerator() {
 				? 'No messages yet. Describe a schedule or ask for a change to get started.'
 				: isERDMode
 					? 'No messages yet. Describe a data model or ask for a change to get started.'
-					: 'No messages yet. Describe a screen or ask for a change to get started.'
+					: isJsonMode
+						? 'No messages yet. Describe JSON or ask for a change to get started.'
+						: 'No messages yet. Describe a screen or ask for a change to get started.'
 	const tips = isUmlMode
 		? [
 				'Switch templates to explore available UML diagram types',
@@ -1164,11 +1228,20 @@ export default function UMLGenerator() {
 							'Fine-tune the ERD code directly in the editor',
 							'Refresh the page to wipe memory',
 						]
-				: [
-						'Describe the primary screen and its sections',
-						'Call out forms, buttons, lists, and menus',
-						'Group related UI elements into panels',
-						'Refine labels and hierarchy for clarity',
+					: isJsonMode
+						? [
+								'Paste valid JSON or describe the schema',
+								'Keep keys concise and consistent',
+								'Include nested objects and arrays as needed',
+								'Validate the JSON structure if something looks off',
+								'Fine-tune the JSON code directly in the editor',
+								'Refresh the page to wipe memory',
+							]
+					: [
+							'Describe the primary screen and its sections',
+							'Call out forms, buttons, lists, and menus',
+							'Group related UI elements into panels',
+							'Refine labels and hierarchy for clarity',
 						'Fine-tune the SALT code directly in the editor',
 						'Refresh the page to wipe memory',
 					]
@@ -1234,6 +1307,7 @@ export default function UMLGenerator() {
 								<TabsTrigger value="ui-mockup">UI Mockups</TabsTrigger>
 								<TabsTrigger value="gantt">Gantt</TabsTrigger>
 								<TabsTrigger value="erd">ERD</TabsTrigger>
+								<TabsTrigger value="json">JSON</TabsTrigger>
 							</TabsList>
 						</Tabs>
 					</div>
@@ -1313,6 +1387,16 @@ export default function UMLGenerator() {
 												Describe entities, attributes, and relationships to build an ER diagram.
 											</p>
 										</div>
+									) : isJsonMode ? (
+										<div>
+											<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
+												<LayoutTemplate className="h-4 w-4 text-primary" />
+												JSON Mode
+											</h3>
+											<p className="text-sm text-muted-foreground">
+												Describe or paste JSON to visualize it as a PlantUML JSON diagram.
+											</p>
+										</div>
 									) : (
 										<div>
 											<h3 className="text-lg font-medium mb-2 flex items-center gap-2">
@@ -1346,7 +1430,9 @@ export default function UMLGenerator() {
 																? 'Describe a Gantt chart or request a change (Shift+Enter for new line)...'
 																: isERDMode
 																	? 'Describe an ER diagram or request a change (Shift+Enter for new line)...'
-																	: 'Describe a UI mockup or request a change (Shift+Enter for new line)...'
+																	: isJsonMode
+																		? 'Describe JSON or request a change (Shift+Enter for new line)...'
+																		: 'Describe a UI mockup or request a change (Shift+Enter for new line)...'
 												}
 												value={chatInput}
 												onChange={e => setChatInput(e.target.value)}
@@ -1438,7 +1524,9 @@ export default function UMLGenerator() {
 															? 'Update Gantt'
 															: isERDMode
 																? 'Update ERD'
-																: 'Update Mockup'}
+																: isJsonMode
+																	? 'Update JSON'
+																	: 'Update Mockup'}
 											</>
 										)}
 									</Button>
@@ -1482,7 +1570,9 @@ export default function UMLGenerator() {
 																		? setGanttCode(e.target.value)
 																		: isERDMode
 																			? setErdCode(e.target.value)
-																			: setUIMockupCode(e.target.value)
+																			: isJsonMode
+																				? setJsonCode(e.target.value)
+																				: setUIMockupCode(e.target.value)
 														}
 														className="font-mono h-full border-0 focus-visible:ring-0 resize-none"
 												/>
@@ -1506,7 +1596,9 @@ export default function UMLGenerator() {
 																	? 'Gantt Preview'
 																	: isERDMode
 																		? 'ERD Preview'
-																		: 'UI Mockup Preview'}
+																		: isJsonMode
+																			? 'JSON Preview'
+																			: 'UI Mockup Preview'}
 													</div>
 													<div className="text-xs text-muted-foreground">
 														{isBusy ? 'Generating...' : 'Ready'}
@@ -1543,7 +1635,9 @@ export default function UMLGenerator() {
 																		? setGanttCode(e.target.value)
 																		: isERDMode
 																			? setErdCode(e.target.value)
-																			: setUIMockupCode(e.target.value)
+																			: isJsonMode
+																				? setJsonCode(e.target.value)
+																				: setUIMockupCode(e.target.value)
 														}
 														className="font-mono h-full border-0 focus-visible:ring-0 resize-none"
 													/>
@@ -1565,7 +1659,9 @@ export default function UMLGenerator() {
 																	? 'Gantt Preview'
 																	: isERDMode
 																		? 'ERD Preview'
-																		: 'UI Mockup Preview'}
+																		: isJsonMode
+																			? 'JSON Preview'
+																			: 'UI Mockup Preview'}
 													</div>
 													<div className="text-xs text-muted-foreground">
 														{isBusy ? 'Generating...' : 'Ready'}
