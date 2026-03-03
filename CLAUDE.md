@@ -9,7 +9,7 @@ UMLBot is an interactive chat-based LLM-powered tool for generating, revising, a
 - **TypeScript/Next.js frontend** (port 3000): Chat UI for diagram interaction
 - **PlantUML server** (Docker): Diagram rendering service
 
-The system supports multiple diagram types: UML diagrams (class, sequence, use case, etc.), mindmaps, UI mockups (SALT), Gantt charts, ER diagrams, and JSON visualizations.
+The system supports multiple diagram types: UML diagrams (class, sequence, use case, etc.), mindmaps, UI mockups (SALT), Gantt charts, ER diagrams, C4 diagrams, and JSON visualizations.
 
 **Key Philosophy**: This project prioritizes reusability through the `llm_utils/aiweb_common` shared workspace. Always search for existing functionality before writing new code.
 
