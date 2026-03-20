@@ -22,6 +22,7 @@ secrets
 .env.*
 
 # Not needed in deployment image
+llm_utils
 .devcontainer
 .kilocode
 .vscode

@@ -48,8 +48,7 @@ The system supports multiple diagram types: UML diagrams (class, sequence, use c
 ```bash
 make venv
 # Or manually:
-uv venv .venv --clear && source .venv/bin/activate
-uv add setuptools wheel && uv add -r requirements.txt && uv pip install -e ".[dev]"
+uv venv .venv --clear && source .venv/bin/activate && uv sync
 ```
 
 ### Running the Application

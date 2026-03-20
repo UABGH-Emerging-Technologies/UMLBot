@@ -17,18 +17,16 @@ help:
 # Styling
 .PHONY: style
 style:
-	black UMLBot app tests streamlit_app.py setup.py __init__.py
+	black UMLBot app tests streamlit_app.py __init__.py
 	flake8
-	python3 -m isort UMLBot app tests streamlit_app.py setup.py __init__.py
-	autopep8 --recursive --aggressive --aggressive UMLBot app tests streamlit_app.py setup.py __init__.py
+	python3 -m isort UMLBot app tests streamlit_app.py __init__.py
+	autopep8 --recursive --aggressive --aggressive UMLBot app tests streamlit_app.py __init__.py
 # Environment
 .ONESHELL:
 venv:
 	uv venv .venv --clear
 	source .venv/bin/activate && \
-	uv add setuptools wheel && \
-	uv add -r requirements.txt &&\
-	uv pip install -e ".[dev]"
+	uv sync
 
 # Run the FastAPI server locally
 .PHONY: run
