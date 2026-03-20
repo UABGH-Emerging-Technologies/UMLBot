@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(PYTHONPATH=/home/rgodwin/repos/Private/UMLBot python3:*k,l)"
-    ]
-  }
-}
