@@ -16,7 +16,7 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
 COPY . .
-RUN uv sync --no-dev
+RUN uv sync
 
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
