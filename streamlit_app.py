@@ -3,6 +3,7 @@ Streamlit-based UMLBot frontend.
 
 Communicates with the FastAPI backend API endpoints to generate and render
 PlantUML diagrams across all supported diagram types.
+LLM credentials are supplied per-request via the sidebar (v1 paradigm).
 """
 
 import base64
@@ -14,13 +15,12 @@ from typing import Any, Dict, List, Optional
 import requests
 import streamlit as st
 
-# Workaround for local llm_utils and UMLBot import
+# Workaround for local llm_utils import
 repo_root = Path(__file__).resolve().parent
 sys.path.append(str(repo_root / "llm_utils"))
 sys.path.append(str(repo_root))
 
 from aiweb_common.streamlit.page_renderer import StreamlitUIHelper
-from UMLBot.config.config import UMLBotConfig
 
 logger = logging.getLogger(__name__)
 
@@ -40,34 +40,45 @@ MODE_LABELS: Dict[str, str] = {
 
 # (generate_path, render_path, default_diagram_type)
 ENDPOINT_MAP: Dict[str, tuple] = {
-    "uml": ("/api/generate", "/api/render", "Use Case"),
-    "mindmap": ("/api/mindmap/generate", "/api/mindmap/render", "Mindmap"),
-    "ui_mockup": ("/api/ui-mockup/generate", "/api/ui-mockup/render", "salt"),
-    "gantt": ("/api/gantt/generate", "/api/gantt/render", "gantt"),
-    "erd": ("/api/erd/generate", "/api/erd/render", "ERD"),
-    "json": ("/api/json/generate", "/api/json/render", "json"),
-    "c4": ("/api/c4/generate", "/api/c4/render", "C4"),
-}
-
-DEFAULT_TEMPLATES: Dict[str, str] = {
-    "uml": UMLBotConfig.FALLBACK_PLANTUML_TEMPLATE.format(
-        diagram_type="Use Case", description="placeholder"
-    ),
-    "mindmap": UMLBotConfig.FALLBACK_MINDMAP_TEMPLATE.format(
-        diagram_type="Mindmap", description="placeholder"
-    ),
-    "ui_mockup": UMLBotConfig.FALLBACK_SALT_TEMPLATE.format(
-        diagram_type="salt", description="placeholder"
-    ),
-    "gantt": UMLBotConfig.FALLBACK_GANTT_TEMPLATE,
-    "erd": UMLBotConfig.FALLBACK_ERD_TEMPLATE,
-    "json": UMLBotConfig.FALLBACK_JSON_TEMPLATE,
-    "c4": UMLBotConfig.FALLBACK_C4_TEMPLATE.format(
-        diagram_type="C4", description="placeholder"
-    ),
+    "uml": ("/v01/generate", "/v01/render", "Use Case"),
+    "mindmap": ("/v01/mindmap/generate", "/v01/mindmap/render", "Mindmap"),
+    "ui_mockup": ("/v01/ui-mockup/generate", "/v01/ui-mockup/render", "salt"),
+    "gantt": ("/v01/gantt/generate", "/v01/gantt/render", "gantt"),
+    "erd": ("/v01/erd/generate", "/v01/erd/render", "ERD"),
+    "json": ("/v01/json/generate", "/v01/json/render", "json"),
+    "c4": ("/v01/c4/generate", "/v01/c4/render", "C4"),
 }
 
 MAX_HISTORY_MESSAGES: int = 10
+
+# ---------------------------------------------------------------------------
+# Remote config fetcher (replaces direct UMLBotConfig import)
+# ---------------------------------------------------------------------------
+
+_remote_config: Optional[Dict[str, Any]] = None
+
+
+def _fetch_remote_config(backend_url: str) -> Dict[str, Any]:
+    """Fetch diagram types and fallback templates from the backend /v01/config endpoint."""
+    global _remote_config  # noqa: PLW0603
+    if _remote_config is not None:
+        return _remote_config
+    try:
+        resp = requests.get(f"{backend_url.rstrip('/')}/v01/config", timeout=10)
+        resp.raise_for_status()
+        _remote_config = resp.json()
+        return _remote_config
+    except Exception as exc:
+        logger.warning("Failed to fetch remote config: %s", exc)
+        return {
+            "diagram_types": [
+                "Use Case", "Class", "Activity", "Component",
+                "Deployment", "State Machine", "Timing", "Sequence",
+            ],
+            "default_diagram_type": "Use Case",
+            "fallback_templates": {},
+        }
+
 
 # ---------------------------------------------------------------------------
 # Fence markers per mode (for prompt instructions)
@@ -106,29 +117,29 @@ def api_generate(
     description: str,
     diagram_type: str,
     theme: Optional[str] = None,
+    openai_compatible_endpoint: str = "",
+    openai_compatible_model: str = "",
+    api_key: str = "",
 ) -> ApiResponse:
     """Call the backend generate endpoint for the given mode.
 
-    Args:
-        backend_url: Base URL of the FastAPI backend (e.g. ``http://localhost:7860``).
-        mode: Diagram mode key (``uml``, ``mindmap``, etc.).
-        description: User description / prompt to send.
-        diagram_type: Specific diagram sub-type (e.g. ``Class``, ``Sequence``).
-        theme: Optional PlantUML theme name.
-
-    Returns:
-        Dict with keys: status, plantuml_code, image_base64, image_url, message.
+    Includes per-request LLM credentials per v1 paradigm.
     """
     generate_path = ENDPOINT_MAP[mode][0]
     url = f"{backend_url.rstrip('/')}{generate_path}"
     payload: Dict[str, Any] = {
         "description": description,
         "diagram_type": diagram_type,
+        "openai_compatible_endpoint": openai_compatible_endpoint,
+        "openai_compatible_model": openai_compatible_model,
     }
     if theme:
         payload["theme"] = theme
+    headers: Dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     try:
-        resp = requests.post(url, json=payload, timeout=120)
+        resp = requests.post(url, json=payload, headers=headers, timeout=120)
         resp.raise_for_status()
         data = resp.json()
         return {
@@ -165,7 +176,7 @@ def api_generate(
             "plantuml_code": "",
             "image_base64": None,
             "image_url": "",
-            "message": body.get("message", f"HTTP {exc.response.status_code}"),
+            "message": body.get("message", body.get("detail", f"HTTP {exc.response.status_code}")),
         }
     except Exception as exc:
         return {
@@ -182,16 +193,7 @@ def api_render(
     mode: str,
     plantuml_code: str,
 ) -> ApiResponse:
-    """Call the backend render endpoint for the given mode.
-
-    Args:
-        backend_url: Base URL of the FastAPI backend.
-        mode: Diagram mode key.
-        plantuml_code: Raw PlantUML code to render.
-
-    Returns:
-        Dict with keys: status, image_base64, image_url, message.
-    """
+    """Call the backend render endpoint for the given mode (no auth required)."""
     render_path = ENDPOINT_MAP[mode][1]
     url = f"{backend_url.rstrip('/')}{render_path}"
     payload = {"plantuml_code": plantuml_code}
@@ -251,14 +253,7 @@ def api_render(
 
 
 def _summarize_chat_history(history: List[Dict[str, str]]) -> str:
-    """Return a newline-joined summary of the most recent chat messages.
-
-    Args:
-        history: Full chat history list of ``{"role": ..., "content": ...}`` dicts.
-
-    Returns:
-        String summary of the last ``MAX_HISTORY_MESSAGES`` messages.
-    """
+    """Return a newline-joined summary of the most recent chat messages."""
     recent = history[-MAX_HISTORY_MESSAGES:]
     lines: List[str] = []
     for msg in recent:
@@ -275,20 +270,7 @@ def _build_prompt_description(
     mode: str,
     diagram_type: str,
 ) -> str:
-    """Compose a full description to send as the ``description`` field to the backend.
-
-    Mirrors the Next.js ``buildPromptDescription`` function.
-
-    Args:
-        user_request: Latest user message.
-        current_code: Current PlantUML code in the editor (may be empty).
-        chat_history: Full chat history.
-        mode: Diagram mode key.
-        diagram_type: Specific diagram sub-type.
-
-    Returns:
-        Composed description string for the backend.
-    """
+    """Compose a full description to send as the ``description`` field to the backend."""
     fence = _FENCE_MARKERS.get(mode, "@startuml and @enduml")
     friendly = _MODE_FRIENDLY.get(mode, "UML")
 
@@ -327,19 +309,11 @@ def _build_prompt_description(
 
 
 def _state_key(mode: str, field: str) -> str:
-    """Build a session-state key scoped to a diagram mode.
-
-    Args:
-        mode: Diagram mode key (e.g. ``uml``, ``mindmap``).
-        field: Field name (e.g. ``chat_history``, ``plantuml_code``).
-
-    Returns:
-        Key string like ``"chat_history_mindmap"``.
-    """
+    """Build a session-state key scoped to a diagram mode."""
     return f"{field}_{mode}"
 
 
-def _init_session_state() -> None:
+def _init_session_state(config: Dict[str, Any]) -> None:
     """Initialise all per-mode and global session state keys if absent."""
     for mode in MODE_LABELS:
         for field, default in [
@@ -355,11 +329,17 @@ def _init_session_state() -> None:
 
     # Global state
     if "backend_url" not in st.session_state:
-        st.session_state["backend_url"] = "http://localhost:7860"
+        st.session_state["backend_url"] = "http://localhost:8000"
     if "theme" not in st.session_state:
         st.session_state["theme"] = ""
     if "uml_subtype" not in st.session_state:
-        st.session_state["uml_subtype"] = UMLBotConfig.DEFAULT_DIAGRAM_TYPE
+        st.session_state["uml_subtype"] = config.get("default_diagram_type", "Use Case")
+    if "openai_compatible_endpoint" not in st.session_state:
+        st.session_state["openai_compatible_endpoint"] = ""
+    if "openai_compatible_model" not in st.session_state:
+        st.session_state["openai_compatible_model"] = ""
+    if "api_key" not in st.session_state:
+        st.session_state["api_key"] = ""
 
 
 # ---------------------------------------------------------------------------
@@ -367,13 +347,8 @@ def _init_session_state() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _render_sidebar(ui: StreamlitUIHelper, current_mode: str) -> None:
-    """Render the sidebar controls.
-
-    Args:
-        ui: StreamlitUIHelper instance.
-        current_mode: Active diagram mode key.
-    """
+def _render_sidebar(ui: StreamlitUIHelper, current_mode: str, config: Dict[str, Any]) -> None:
+    """Render the sidebar controls."""
     with st.sidebar:
         ui.header("Settings")
 
@@ -382,6 +357,30 @@ def _render_sidebar(ui: StreamlitUIHelper, current_mode: str) -> None:
             value=st.session_state["backend_url"],
             key="sidebar_backend_url",
         )
+
+        ui.markdown("---")
+        ui.subheader("LLM Credentials")
+
+        st.session_state["openai_compatible_endpoint"] = ui.text_input(
+            "OpenAI-Compatible Endpoint",
+            value=st.session_state["openai_compatible_endpoint"],
+            key="sidebar_endpoint",
+        )
+
+        st.session_state["openai_compatible_model"] = ui.text_input(
+            "Model Name",
+            value=st.session_state["openai_compatible_model"],
+            key="sidebar_model",
+        )
+
+        st.session_state["api_key"] = st.text_input(
+            "API Key",
+            value=st.session_state["api_key"],
+            type="password",
+            key="sidebar_api_key",
+        )
+
+        ui.markdown("---")
 
         st.session_state["theme"] = ui.text_input(
             "PlantUML Theme (optional)",
@@ -430,14 +429,9 @@ def _handle_chat_input(
     ui: StreamlitUIHelper,
     mode: str,
     user_message: str,
+    config: Dict[str, Any],
 ) -> None:
-    """Process a new chat message: call backend generate, update state.
-
-    Args:
-        ui: StreamlitUIHelper instance.
-        mode: Diagram mode key.
-        user_message: The user's chat input.
-    """
+    """Process a new chat message: call backend generate, update state."""
     history_key = _state_key(mode, "chat_history")
     code_key = _state_key(mode, "plantuml_code")
     img_key = _state_key(mode, "image_base64")
@@ -452,7 +446,7 @@ def _handle_chat_input(
 
     # Determine diagram_type
     if mode == "uml":
-        diagram_type = st.session_state.get("uml_subtype", UMLBotConfig.DEFAULT_DIAGRAM_TYPE)
+        diagram_type = st.session_state.get("uml_subtype", config.get("default_diagram_type", "Use Case"))
     else:
         diagram_type = ENDPOINT_MAP[mode][2]
 
@@ -473,6 +467,9 @@ def _handle_chat_input(
             description=description,
             diagram_type=diagram_type,
             theme=theme,
+            openai_compatible_endpoint=st.session_state.get("openai_compatible_endpoint", ""),
+            openai_compatible_model=st.session_state.get("openai_compatible_model", ""),
+            api_key=st.session_state.get("api_key", ""),
         )
 
     if result["status"] == "ok":
@@ -497,12 +494,7 @@ def _handle_rerender(
     ui: StreamlitUIHelper,
     mode: str,
 ) -> None:
-    """Re-render diagram from the current code in the editor.
-
-    Args:
-        ui: StreamlitUIHelper instance.
-        mode: Diagram mode key.
-    """
+    """Re-render diagram from the current code in the editor."""
     code_key = _state_key(mode, "plantuml_code")
     img_key = _state_key(mode, "image_base64")
     status_key = _state_key(mode, "status_message")
@@ -529,13 +521,8 @@ def _handle_rerender(
         st.session_state[status_key] = ""
 
 
-def _render_mode_tab(ui: StreamlitUIHelper, mode: str) -> None:
-    """Render the contents of a single diagram mode tab.
-
-    Args:
-        ui: StreamlitUIHelper instance.
-        mode: Diagram mode key.
-    """
+def _render_mode_tab(ui: StreamlitUIHelper, mode: str, config: Dict[str, Any]) -> None:
+    """Render the contents of a single diagram mode tab."""
     history_key = _state_key(mode, "chat_history")
     code_key = _state_key(mode, "plantuml_code")
     img_key = _state_key(mode, "image_base64")
@@ -543,13 +530,14 @@ def _render_mode_tab(ui: StreamlitUIHelper, mode: str) -> None:
     error_key = _state_key(mode, "error_message")
 
     # UML sub-type dropdown (only for uml mode)
+    diagram_types = config.get("diagram_types", ["Use Case", "Class", "Sequence"])
     if mode == "uml":
+        current_subtype = st.session_state.get("uml_subtype", config.get("default_diagram_type", "Use Case"))
+        idx = diagram_types.index(current_subtype) if current_subtype in diagram_types else 0
         st.session_state["uml_subtype"] = ui.selectbox(
             "UML Diagram Type",
-            options=UMLBotConfig.DIAGRAM_TYPES,
-            index=UMLBotConfig.DIAGRAM_TYPES.index(
-                st.session_state.get("uml_subtype", UMLBotConfig.DEFAULT_DIAGRAM_TYPE)
-            ),
+            options=diagram_types,
+            index=idx,
             key=f"uml_subtype_select_{mode}",
         )
 
@@ -568,7 +556,7 @@ def _render_mode_tab(ui: StreamlitUIHelper, mode: str) -> None:
     )
 
     if user_input:
-        _handle_chat_input(ui, mode, user_input)
+        _handle_chat_input(ui, mode, user_input, config)
         st.rerun()
 
     # Two-column layout: code editor | image preview
@@ -621,7 +609,11 @@ def main() -> None:
     ui = StreamlitUIHelper()
     StreamlitUIHelper.setup_page("UMLBot", page_icon="📐", hide_branding=True)
 
-    _init_session_state()
+    # Fetch config from backend (with fallback defaults)
+    backend_url = st.session_state.get("backend_url", "http://localhost:8000")
+    config = _fetch_remote_config(backend_url)
+
+    _init_session_state(config)
 
     ui.title("UMLBot")
     ui.markdown("Interactive diagram generation powered by LLM + PlantUML")
@@ -632,16 +624,14 @@ def main() -> None:
 
     mode_keys = list(MODE_LABELS.keys())
 
-    # Determine current mode for sidebar (first tab by default, but we track via tabs)
-    # Streamlit tabs don't expose which is active, so sidebar uses first mode or stored value.
     if "active_mode" not in st.session_state:
         st.session_state["active_mode"] = mode_keys[0]
 
     for tab, mode_key in zip(tabs, mode_keys):
         with tab:
-            _render_mode_tab(ui, mode_key)
+            _render_mode_tab(ui, mode_key, config)
 
-    _render_sidebar(ui, st.session_state.get("active_mode", "uml"))
+    _render_sidebar(ui, st.session_state.get("active_mode", "uml"), config)
 
 
 if __name__ == "__main__":

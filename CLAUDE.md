@@ -26,26 +26,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 UMLBot is an interactive chat-based LLM-powered tool for generating, revising, and validating diagrams using PlantUML. It consists of:
-- **Python backend** (Gradio/FastAPI/Uvicorn): LLM-backed diagram generation and PlantUML rendering
-- **TypeScript/Next.js frontend** (port 3000): Chat UI for diagram interaction
-- **PlantUML server** (Docker): Diagram rendering service
+- **Python backend** (FastAPI/Uvicorn on port 8000): LLM-backed diagram generation and PlantUML rendering
+- **Streamlit frontend** (port 8501): Chat UI for diagram interaction
+- **PlantUML JAR** (local subprocess): Diagram rendering via `java -jar plantuml.jar`
 
 The system supports multiple diagram types: UML diagrams (class, sequence, use case, etc.), mindmaps, UI mockups (SALT), Gantt charts, ER diagrams, C4 diagrams, and JSON visualizations.
 
 **Key Philosophy**: This project prioritizes reusability through the `llm_utils/aiweb_common` shared workspace. Always search for existing functionality before writing new code.
 
+**v1 Paradigm**: LLM credentials are supplied per-request (see `azurify.md`). The server does NOT store API keys. Every generate request must include `openai_compatible_endpoint`, `openai_compatible_model` in the body and `Authorization: Bearer <key>` in the header.
+
 ## Development Setup
 
 ### Environment Configuration
 1. Copy `.env.example` to `.env` and configure:
-   - `UMLBOT_LLM_API_BASE` - OpenAI-compatible API endpoint
-   - `UMLBOT_LLM_API_KEY` - API key for LLM access
-   - `UMLBOT_LLM_MODEL` (optional, defaults to `gpt-4o-mini`)
-   - `UMLBOT_PLANTUML_SERVER_URL_TEMPLATE` (defaults to `http://localhost:8080/png/{encoded}`)
+   - `UMLBOT_PLANTUML_JAR_PATH` (optional, defaults to `/opt/plantuml/plantuml.jar`)
 
-2. Copy `app/frontend/.env.local.example` to `app/frontend/.env.local` and configure:
-   - `NEXT_PUBLIC_GRADIO_API_BASE` - Backend API URL (defaults to `http://localhost:7860`)
-   - `NEXT_PUBLIC_PLANTUML_SERVER_BASE` - PlantUML server for browser rendering
+2. Ensure Java (JRE 17+) is installed for PlantUML JAR rendering.
 
 ### Python Backend Setup
 ```bash
@@ -55,37 +52,29 @@ uv venv .venv --clear && source .venv/bin/activate
 uv add setuptools wheel && uv add -r requirements.txt && uv pip install -e ".[dev]"
 ```
 
-### Frontend Setup
-```bash
-make npm-install   # Or: cd app/frontend && npm install
-make npm-dev       # Or: cd app/frontend && npm run dev
-make npm-build     # Or: cd app/frontend && npm run build
-```
-
 ### Running the Application
 
-**Docker Compose (Full Stack):**
+**Docker Compose:**
 ```bash
-docker compose up --build  # Frontend at http://localhost:3000
+docker compose up --build  # API at http://localhost:8000
 ```
 
 **Local Development:**
 ```bash
-make plantuml-up
 set -a && source .env && set +a
-uvicorn gradio_app:app --reload          # Backend at http://localhost:7860
-cd app/frontend && npm run dev           # Frontend at http://localhost:3000
+make run                                # Backend at http://localhost:8000
+make streamlit                          # Streamlit UI at http://localhost:8501
 ```
 
-**Devcontainer (VS Code):** Automatically creates `.venv`, installs deps, starts PlantUML server. Backend uses `http://plantuml:8080`, frontend proxies via `http://backend:7860`.
+**Devcontainer (VS Code):** Automatically creates `.venv`, installs deps, downloads PlantUML JAR.
 
 ## Common Commands
 
 ```bash
 make style          # Code formatting (black, isort, autopep8, flake8)
 make test           # Run tests (or: PYTHONPATH=$(pwd) .venv/bin/python -m pytest -q)
-make plantuml-up    # Start PlantUML server
-make plantuml-down  # Stop PlantUML server
+make run            # Start FastAPI server locally
+make streamlit      # Start Streamlit frontend
 make docs           # Build and serve MkDocs on http://0.0.0.0:8000
 make clean          # Clean temporary files
 
@@ -97,52 +86,74 @@ PYTHONPATH=$(pwd) .venv/bin/python -m pytest tests/test_file.py::test_name -v
 
 ### High-Level Structure
 ```
-UMLBot/                      # Main Python package
-├── config/                  # Configuration (config.py with UMLBotConfig)
-├── diagram_handlers/        # LLM prompt handlers for each diagram type
-│   ├── uml_draft_handler.py      # UML diagrams via uml_diagram.prompty
-│   ├── mindmap_draft_handler.py  # Mindmaps via mindmap.prompty
-│   ├── ui_mockup_draft_handler.py # SALT UI mockups via ui_mockup.prompty
-│   ├── gantt_draft_handler.py    # Gantt charts via gantt_chart.prompty
-│   ├── er_draft_handler.py       # ER diagrams via erd.prompty
-│   └── json_draft_handler.py     # JSON via json.prompty
-├── services/                # Business logic
-│   └── diagram_service.py   # DiagramService orchestrates generation + rendering
-├── utils/                   # Utilities (PlantUML extraction, encoding)
-├── api_server.py            # FastAPI endpoints (/api/generate, /api/render, etc.)
-└── llm_interface.py         # LLM interaction wrapper
+app/                             # FastAPI application layer
+├── server.py                    # FastAPI entry point (port 8000)
+├── fastapi_config.py            # API metadata (title, version, contact)
+└── v01/                         # v01 API version
+    ├── __init__.py              # Aggregates sub-routers into v01_router
+    ├── schemas.py               # Pydantic request/response models
+    ├── dependencies.py          # Bearer token extraction, service singleton
+    ├── generate.py              # All /generate endpoints (auth required)
+    ├── render.py                # All /render endpoints (no auth)
+    └── config_router.py         # GET /config endpoint
 
-app/frontend/                # Next.js frontend
-├── app/                     # Next.js app router (page.tsx = main chat interface)
-├── actions/                 # Server actions for backend calls
-└── components/              # React components
+UMLBot/                          # Core Python package
+├── config/                      # Configuration (config.py with UMLBotConfig)
+├── diagram_handlers/            # LLM prompt handlers for each diagram type
+│   ├── uml_draft_handler.py     # UML diagrams via uml_diagram.prompty
+│   ├── mindmap_draft_handler.py # Mindmaps via mindmap.prompty
+│   ├── ui_mockup_draft_handler.py # SALT UI mockups
+│   ├── gantt_draft_handler.py   # Gantt charts
+│   ├── er_draft_handler.py      # ER diagrams
+│   ├── json_draft_handler.py    # JSON visualizations
+│   └── c4_draft_handler.py      # C4 diagrams
+├── services/                    # Business logic
+│   └── diagram_service.py       # DiagramService: generation + JAR rendering
+├── utils/                       # Utilities (PlantUML extraction)
+└── llm_interface.py             # LLM interaction wrapper
 
-assets/                      # Prompty templates (*.prompty)
-llm_utils/aiweb_common/      # Shared workspace LLM utilities (WorkflowHandler, etc.)
-tests/                       # pytest test suite
-docs/                        # MkDocs documentation
+explorations/                    # Archived exploration code
+├── frontend-nextjs/             # Former Next.js frontend
+└── gradio-ui/                   # Former Gradio app
+
+assets/                          # Prompty templates (*.prompty)
+llm_utils/aiweb_common/          # Shared workspace LLM utilities (WorkflowHandler, etc.)
+tests/                           # pytest test suite
+docs/                            # MkDocs documentation
+streamlit_app.py                 # Streamlit frontend (decoupled, uses /v01/ API)
 ```
 
 ### Core Workflow
 
-1. **User Input**: Chat interface (`app/frontend/app/page.tsx`) sends description + diagram type to backend
-2. **Backend Routing**: `api_server.py` receives request, routes to `DiagramService`
-3. **DiagramService** (`UMLBot/services/diagram_service.py`): Routes to appropriate handler method based on diagram type
-4. **Handler Execution**: Each `*DraftHandler` (in `UMLBot/diagram_handlers/`) inherits from `WorkflowHandler`, loads a prompty template from `assets/`, invokes the LLM, and returns PlantUML code
-5. **PlantUML Rendering**: `DiagramService.render_plantuml()` encodes the code, sends to PlantUML server, returns PIL Image
-6. **Error Handling**: `UMLRetryManager` retries on failure; fallback templates (`FALLBACK_*_TEMPLATE` in config) provide graceful degradation
-7. **Response**: `DiagramGenerationResult` dataclass returned with plantuml_code, image, status_message, image_url
+1. **User Input**: Streamlit UI (`streamlit_app.py`) sends description + diagram type + LLM credentials to backend
+2. **Backend Routing**: `app/server.py` → `app/v01/generate.py` extracts bearer token, validates request
+3. **DiagramService** (`UMLBot/services/diagram_service.py`): Routes to appropriate handler, passes per-request credentials
+4. **Handler Execution**: Each `*DraftHandler` inherits from `WorkflowHandler`, loads prompty template, invokes LLM
+5. **PlantUML Rendering**: `_render_plantuml_jar()` invokes `java -jar plantuml.jar -tpng -pipe` via subprocess
+6. **Error Handling**: `UMLRetryManager` retries on failure; fallback templates provide graceful degradation
+7. **Response**: `DiagramGenerationResult` dataclass returned with plantuml_code, image, status_message
 
-### API Endpoints
-- `/api/generate` - Generate new diagram
-- `/api/render` - Render existing PlantUML code
-- `/api/chat` - Chat-based revision workflow
-- `/api/mindmap`, `/api/ui-mockup`, `/api/gantt`, `/api/erd`, `/api/json` - Specialized endpoints
+### API Endpoints (all under `/v01/`)
+
+**Generate endpoints** (POST, auth required — `Authorization: Bearer <key>`):
+- `/v01/generate` — UML diagrams
+- `/v01/mindmap/generate`, `/v01/ui-mockup/generate`, `/v01/gantt/generate`
+- `/v01/erd/generate`, `/v01/json/generate`, `/v01/c4/generate`
+
+**Render endpoints** (POST, no auth):
+- `/v01/render`, `/v01/mindmap/render`, `/v01/ui-mockup/render`, `/v01/gantt/render`
+- `/v01/erd/render`, `/v01/json/render`, `/v01/c4/render`
+
+**Config**: `GET /v01/config` — returns diagram types and fallback templates
+
+**Health**: `GET /health` — returns `{"status": "ok"}`
 
 ### Key Design Patterns
+- **v1 Paradigm**: LLM credentials per-request, no server-side API key storage
 - **Handler Pattern**: Each diagram type has a dedicated `*DraftHandler` inheriting from `WorkflowHandler`
 - **Prompty Templates**: LLM prompts defined in `.prompty` files (assets/) with variable injection
 - **Service Layer**: `DiagramService` abstracts generation + rendering for all diagram types
+- **Local JAR Rendering**: PlantUML renders via subprocess (`java -jar plantuml.jar -tpng -pipe`)
 - **Retry Strategy**: `UMLRetryManager` tracks attempts and error context for auto-correction
 - **Fallback Diagrams**: `FALLBACK_*_TEMPLATE` constants provide graceful degradation
 
@@ -154,12 +165,11 @@ Follow this checklist (using "Network Diagram" as example):
 2. **Create Handler** — `UMLBot/diagram_handlers/network_draft_handler.py` inheriting from `WorkflowHandler`
 3. **Export Handler** — Add to `UMLBot/diagram_handlers/__init__.py`
 4. **Add Fallback Template** — `FALLBACK_NETWORK_TEMPLATE` in `UMLBot/config/config.py`
-5. **Add Service Method** — `generate_network_from_description()` in `UMLBot/services/diagram_service.py`
-6. **Add API Endpoint** — `/api/network` in `UMLBot/api_server.py`
-7. **Add to Gradio UI** — Update `gradio_app.py` dropdown and routing
-8. **Add Frontend Support** — `constants.ts`, server action, API route, UI updates
-9. **Add Tests** — `tests/test_network_draft_handler.py`
-10. **Update Documentation** — docs/ entries and README
+5. **Add Service Method** — `generate_network_from_description()` in `UMLBot/services/diagram_service.py` (with per-request credential params)
+6. **Add API Endpoint** — Add to `app/v01/generate.py` and `app/v01/render.py`
+7. **Add Frontend Support** — Update `ENDPOINT_MAP` in `streamlit_app.py`
+8. **Add Tests** — `tests/test_network_draft_handler.py`
+9. **Update Documentation** — docs/ entries and README
 
 **Handler pattern to follow:**
 ```python
@@ -170,20 +180,21 @@ class NetworkDraftHandler(WorkflowHandler):
         super().__init__()
         self.prompty_path = Path(__file__).parents[2] / "assets" / "network_diagram.prompty"
         self.config = config or UMLBotConfig()
+```
 
-    def generate(self, description: str, diagram_type: str = "network", theme: Optional[str] = None) -> str:
-        prompt_template = self.load_prompty()
-        self._init_openai(
-            openai_compatible_endpoint=self.config.LLM_API_BASE,
-            openai_compatible_key=self.config.LLM_API_KEY,
-            openai_compatible_model=self.config.LLM_MODEL,
-            name="UMLBot"
-        )
-        formatted_prompt = prompt_template.format_messages(
-            diagram_type=diagram_type, description=description, theme=theme or ""
-        )
-        response = self.llm_interface.invoke(formatted_prompt)
-        return self.check_content_type(response)
+**Service method pattern** (credentials passed from API layer):
+```python
+def generate_network_from_description(
+    self, description, diagram_type, theme=None,
+    openai_compatible_endpoint="", openai_compatible_key="", openai_compatible_model="",
+) -> DiagramGenerationResult:
+    handler = NetworkDraftHandler()
+    return self._generate_from_description(
+        handler=handler, description=description, diagram_type=diagram_type,
+        theme=theme, fallback_template=UMLBotConfig.FALLBACK_NETWORK_TEMPLATE,
+        failure_log="...", openai_compatible_endpoint=openai_compatible_endpoint,
+        openai_compatible_key=openai_compatible_key, openai_compatible_model=openai_compatible_model,
+    )
 ```
 
 ## Testing
@@ -216,30 +227,31 @@ LOGGER = logging.getLogger(__name__)
 ### Common Issues
 | Issue | Solution |
 |-------|----------|
-| LLM API key not found | Check `.env` has `UMLBOT_LLM_API_KEY`; verify loaded: `set -a && source .env && set +a` |
-| PlantUML connection refused | `make plantuml-up`; in Docker use `http://plantuml:8080` |
+| PlantUML JAR not found | Set `UMLBOT_PLANTUML_JAR_PATH` env var or ensure JAR is at `/opt/plantuml/plantuml.jar` |
+| Java not installed | Install JRE 17+: `apt install temurin-17-jre` or `default-jre-headless` |
+| 401 on generate | Include `Authorization: Bearer <key>` header in request |
 | Prompty file not found | Path should be `Path(__file__).parents[2] / "assets" / "diagram.prompty"` |
-| Invalid PlantUML code | Check `@startuml`/`@enduml` markers; test directly against PlantUML server |
+| Invalid PlantUML code | Check `@startuml`/`@enduml` markers |
 | Import errors | `export PYTHONPATH=$(pwd)`; verify `__init__.py` files exist |
 
 ## Key Configuration
 
 ### Backend (UMLBotConfig)
 - `DIAGRAM_TYPES`: Supported UML diagram types
-- `PLANTUML_SERVER_URL_TEMPLATE`: PlantUML render endpoint (auto-detects Docker vs local)
-- `LLM_API_KEY`, `LLM_API_BASE`, `LLM_MODEL`: LLM config from env or `manage_sensitive()`
-- `CORS_ALLOW_ORIGINS`: Frontend origins (defaults to localhost:3000)
+- `PLANTUML_JAR_PATH`: Path to PlantUML JAR (env: `UMLBOT_PLANTUML_JAR_PATH`)
 - `FALLBACK_*_TEMPLATE`: Fallback templates for each diagram type
+- No LLM credentials stored server-side (v1 paradigm — per-request)
 
-### Frontend
-- `NEXT_PUBLIC_GRADIO_API_BASE`: Backend API URL
-- `NEXT_PUBLIC_PLANTUML_SERVER_BASE`: PlantUML server for client-side rendering
+### Streamlit Frontend
+- Backend URL configurable in sidebar (defaults to `http://localhost:8000`)
+- LLM credentials entered via sidebar (endpoint, model, API key)
 
 ## Important Notes
 
-- **PlantUML server**: Must be running for rendering; use `make plantuml-up` locally or Docker Compose
-- **Docker networking**: Inside Docker, use service names (`http://plantuml:8080`, `http://backend:7860`)
-- **Package management**: Python uses `uv` (preferred); frontend uses `npm`
+- **PlantUML rendering**: Uses local JAR via subprocess — requires Java runtime
+- **Single container**: Docker image includes Python + JRE, no separate PlantUML server
+- **Package management**: Python uses `uv` (preferred)
+- **Exploration artifacts**: Old Next.js frontend and Gradio app archived in `explorations/`
 
 ## Git Workflow
 
@@ -268,6 +280,6 @@ Types: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `chore:`
 ## Documentation
 
 - Architecture: `docs/architecture.md`
-- API server: `docs/UMLBot/api_server.md`
+- API endpoints: `app/v01/` (generate.py, render.py, config_router.py)
 - Diagram handlers: `docs/UMLBot/diagram_handlers/`
 - Build docs: `make docs` (serves on port 8000)

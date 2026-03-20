@@ -1,39 +1,19 @@
 # =============================================================================
-# Stage 1 – Build the Next.js frontend
-# =============================================================================
-FROM node:18-bookworm-slim AS frontend-builder
-
-WORKDIR /app
-
-COPY app/frontend/package.json app/frontend/package-lock.json /app/
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 make g++ \
-    && rm -rf /var/lib/apt/lists/*
-RUN npm ci
-
-COPY app/frontend /app
-
-# At runtime the frontend talks to the backend on the same host.
-ENV NEXT_PUBLIC_GRADIO_API_BASE=http://127.0.0.1:7860
-RUN npm run build
-
-# =============================================================================
-# Stage 2 – Extract Jetty + PlantUML WAR from the official image
+# Stage 1 – Extract PlantUML JAR from the official image
 # =============================================================================
 FROM plantuml/plantuml-server:jetty AS plantuml-extractor
 
-# Nothing to do – we just COPY from this stage below.
+# The official image bundles the JAR inside the WAR; extract it.
+RUN mkdir -p /opt/plantuml \
+    && cp /plantuml.war /opt/plantuml/plantuml.jar
 
 # =============================================================================
-# Stage 3 – Unified runtime
+# Stage 2 – Unified runtime (Python + JRE only)
 # =============================================================================
 FROM python:3.11-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1 \
-    UMLBOT_SINGLE_CONTAINER=true
+    PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
@@ -47,7 +27,6 @@ RUN apt-get update \
         gnupg \
         graphviz \
         fonts-dejavu-core \
-        supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- JRE 17 (Temurin / Adoptium) -------------------------------------------
@@ -59,26 +38,19 @@ RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
     && apt-get install -y --no-install-recommends temurin-17-jre \
     && rm -rf /var/lib/apt/lists/*
 
-# ---- Node.js 18 (nodesource) -----------------------------------------------
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
-# ---- PlantUML / Jetty from stage 2 -----------------------------------------
-COPY --from=plantuml-extractor /usr/local/jetty  /opt/jetty
-COPY --from=plantuml-extractor /var/lib/jetty     /opt/jetty-base
-COPY --from=plantuml-extractor /plantuml.war      /plantuml.war
-
-# Set context path to root so URLs match http://localhost:8080/png/{encoded}
-ENV CONTEXT_PATH=/
+# ---- PlantUML JAR from stage 1 ----------------------------------------------
+COPY --from=plantuml-extractor /opt/plantuml/plantuml.jar /opt/plantuml/plantuml.jar
+ENV UMLBOT_PLANTUML_JAR_PATH=/opt/plantuml/plantuml.jar
 
 # ---- Python dependencies ----------------------------------------------------
 COPY requirements.txt pyproject.toml setup.py /app/
 COPY llm_utils /app/llm_utils
 COPY UMLBot /app/UMLBot
-COPY gradio_app.py /app/gradio_app.py
 COPY app /app/app
 COPY assets /app/assets
+COPY streamlit_app.py /app/streamlit_app.py
+COPY api_startup.sh /app/api_startup.sh
+RUN chmod +x /app/api_startup.sh
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements.txt \
@@ -92,16 +64,6 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -e /app \
     && python -c "import langchain; from langchain.prompts import ChatPromptTemplate; print('langchain OK', langchain.__version__)"
 
-# ---- Next.js production build from stage 1 ----------------------------------
-COPY --from=frontend-builder /app/package.json   /app/app/frontend/package.json
-COPY --from=frontend-builder /app/node_modules   /app/app/frontend/node_modules
-COPY --from=frontend-builder /app/.next          /app/app/frontend/.next
-COPY --from=frontend-builder /app/public         /app/app/frontend/public
+EXPOSE 8000
 
-# ---- supervisord config -----------------------------------------------------
-RUN mkdir -p /var/log/supervisor
-COPY Docker/supervisord.conf /etc/supervisor/conf.d/umlbot.conf
-
-EXPOSE 3000 7860 8080
-
-CMD ["supervisord", "-n", "-c", "/etc/supervisor/conf.d/umlbot.conf"]
+ENTRYPOINT ["./api_startup.sh"]

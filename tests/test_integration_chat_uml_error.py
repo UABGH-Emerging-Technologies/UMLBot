@@ -3,6 +3,10 @@ Integration tests for chat workflow, UMLDraftHandler, and GenericErrorHandler.
 Mocks UI/user input and verifies end-to-end error handling and revision workflow.
 """
 
+import os
+
+os.environ.setdefault("azure_proxy_key", "test-key")
+
 import pytest
 from unittest.mock import Mock
 from UMLBot.diagram_handlers.uml_draft_handler import UMLDraftHandler
@@ -16,33 +20,6 @@ class DummyPrompt:
 
     def format_prompt(self, **kwargs):
         return f"Diagram: {kwargs.get('diagram_type')}, Desc: {kwargs.get('description')}, Theme: {kwargs.get('theme', '')}"
-
-
-def test_chat_history_scrollable_and_persistent(monkeypatch):
-    """
-    Verifies that the chat history is preserved and all messages (user, assistant, system, error)
-    are present and accessible for scrolling in the Gradio UI.
-    """
-    from gradio_app import format_chat_history
-
-    # Simulate a session with multiple message types
-    chat_history = [
-        {"role": "user", "content": "First question"},
-        {"role": "system", "content": "System info"},
-        {"role": "assistant", "content": "Assistant reply"},
-        {"role": "error", "content": "Error occurred"},
-        {"role": "user", "content": "Second question"},
-        {"role": "assistant", "content": "Second reply"},
-    ]
-    formatted = format_chat_history(chat_history)
-    # All messages should be present and in order
-    assert len(formatted) == len(chat_history)
-    # Check error/system formatting
-    assert formatted[1]["content"].startswith("ℹ️")
-    assert formatted[3]["content"].startswith("❌")
-    # Check scrollable property via elem_classes
-    # (UI test: would require selenium or gradio test client for full scroll test)
-    # Here, we check the formatting and presence only
 
 
 def test_chat_uml_revision_with_error_handler(monkeypatch):

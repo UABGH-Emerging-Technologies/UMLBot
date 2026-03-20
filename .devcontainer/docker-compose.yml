@@ -13,14 +13,7 @@ services:
     volumes:
       - ..:/workspaces/UMLBot:cached
       - umlbot-venv:/workspaces/UMLBot/.venv
-      - umlbot-frontend-node_modules:/workspaces/UMLBot/app/frontend/node_modules
     command: sleep infinity
-
-  plantuml:
-    image: plantuml/plantuml-server:latest
-    container_name: umlbot-plantuml
-    restart: unless-stopped
 
 volumes:
   umlbot-venv:
-  umlbot-frontend-node_modules:
