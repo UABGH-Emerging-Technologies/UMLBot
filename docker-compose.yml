@@ -1,8 +1,6 @@
 services:
   umlbot:
-    build:
-      context: .
-      dockerfile: Docker/Dockerfile
+    build: .
     env_file:
       - .env
     ports:
