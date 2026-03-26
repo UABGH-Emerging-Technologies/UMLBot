@@ -61,7 +61,7 @@ def escape_curly_braces(val: Optional[str]) -> Optional[str]:
     return val.replace("{", "{{").replace("}", "}}")
 
 
-from llm_utils.aiweb_common.WorkflowHandler import WorkflowHandler
+from aiweb_common.WorkflowHandler import WorkflowHandler
 from UMLBot.config.config import UMLBotConfig
 
 

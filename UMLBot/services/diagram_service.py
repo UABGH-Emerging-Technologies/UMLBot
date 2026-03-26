@@ -300,7 +300,7 @@ def _render_plantuml_jar(
     jar_path = UMLBotConfig.PLANTUML_JAR_PATH
     try:
         proc = subprocess.run(
-            ["java", "-jar", jar_path, "-tpng", "-pipe"],
+            ["java", "-Xmx256m", "-jar", jar_path, "-tpng", "-pipe"],
             input=plantuml_code.encode("utf-8"),
             capture_output=True,
             timeout=30,

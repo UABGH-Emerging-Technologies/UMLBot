@@ -1,8 +1,9 @@
 services:
   umlbot:
     build: .
-    env_file:
-      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      UMLBOT_PLANTUML_JAR_PATH: /opt/plantuml/plantuml.jar
     ports:
       - "8000:8000"
     healthcheck:

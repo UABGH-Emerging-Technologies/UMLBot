@@ -4,7 +4,7 @@ Covers error detection, correction callback, and retry limit enforcement.
 """
 
 import pytest
-from llm_utils.aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
+from aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
 
 
 def test_successful_operation():

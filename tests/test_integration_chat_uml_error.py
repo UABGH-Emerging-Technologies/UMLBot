@@ -11,7 +11,7 @@ import pytest
 from unittest.mock import Mock
 from UMLBot.diagram_handlers.uml_draft_handler import UMLDraftHandler
 from UMLBot.config.config import UMLBotConfig
-from llm_utils.aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
+from aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
 
 
 class DummyPrompt:
