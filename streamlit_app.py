@@ -72,8 +72,14 @@ def _fetch_remote_config(backend_url: str) -> Dict[str, Any]:
         logger.warning("Failed to fetch remote config: %s", exc)
         return {
             "diagram_types": [
-                "Use Case", "Class", "Activity", "Component",
-                "Deployment", "State Machine", "Timing", "Sequence",
+                "Use Case",
+                "Class",
+                "Activity",
+                "Component",
+                "Deployment",
+                "State Machine",
+                "Timing",
+                "Sequence",
             ],
             "default_diagram_type": "Use Case",
             "fallback_templates": {},
@@ -446,7 +452,9 @@ def _handle_chat_input(
 
     # Determine diagram_type
     if mode == "uml":
-        diagram_type = st.session_state.get("uml_subtype", config.get("default_diagram_type", "Use Case"))
+        diagram_type = st.session_state.get(
+            "uml_subtype", config.get("default_diagram_type", "Use Case")
+        )
     else:
         diagram_type = ENDPOINT_MAP[mode][2]
 
@@ -532,7 +540,9 @@ def _render_mode_tab(ui: StreamlitUIHelper, mode: str, config: Dict[str, Any]) -
     # UML sub-type dropdown (only for uml mode)
     diagram_types = config.get("diagram_types", ["Use Case", "Class", "Sequence"])
     if mode == "uml":
-        current_subtype = st.session_state.get("uml_subtype", config.get("default_diagram_type", "Use Case"))
+        current_subtype = st.session_state.get(
+            "uml_subtype", config.get("default_diagram_type", "Use Case")
+        )
         idx = diagram_types.index(current_subtype) if current_subtype in diagram_types else 0
         st.session_state["uml_subtype"] = ui.selectbox(
             "UML Diagram Type",

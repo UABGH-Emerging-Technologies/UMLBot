@@ -20,6 +20,4 @@ class MindmapDraftHandler(UMLDraftHandler):
     def __init__(self, config: Optional[UMLBotConfig] = None):
         """Initialize the handler with optional configuration overrides."""
         super().__init__(config=config)
-        self.prompty_path = (
-            Path(__file__).resolve().parents[2] / "assets" / "mindmap.prompty"
-        )
+        self.prompty_path = Path(__file__).resolve().parents[2] / "assets" / "mindmap.prompty"

@@ -3,10 +3,12 @@ Unit tests for UMLDraftHandler (chat-based UML revision workflow).
 Covers prompt construction, LLM invocation, and error handling.
 """
 
-import pytest
 from unittest.mock import Mock, patch
-from UMLBot.diagram_handlers.uml_draft_handler import UMLDraftHandler
+
+import pytest
+
 from UMLBot.config.config import UMLBotConfig
+from UMLBot.diagram_handlers.uml_draft_handler import UMLDraftHandler
 
 
 class DummyPrompt:

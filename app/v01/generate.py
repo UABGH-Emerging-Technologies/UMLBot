@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Security
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
 
-from app.v01.dependencies import get_bearer_token, get_diagram_service
+from app.v01.dependencies import get_diagram_service, security
 from app.v01.schemas import DiagramGenerateRequest, DiagramResponse
 from UMLBot.services.diagram_service import DiagramService
 
@@ -62,75 +63,82 @@ def _generate_and_respond(
 @router.post("/generate", response_model=DiagramResponse)
 async def generate_uml(
     body: DiagramGenerateRequest,
-    request: Request,
+    credentials: HTTPAuthorizationCredentials = Security(security),
     service: DiagramService = Depends(get_diagram_service),
 ) -> DiagramResponse | JSONResponse:
     """Generate a UML diagram from a text description."""
-    api_key = get_bearer_token(request)
-    return _generate_and_respond(body, api_key, service, "generate_diagram_from_description")
+    return _generate_and_respond(
+        body, credentials.credentials, service, "generate_diagram_from_description"
+    )
 
 
 @router.post("/mindmap/generate", response_model=DiagramResponse)
 async def generate_mindmap(
     body: DiagramGenerateRequest,
-    request: Request,
+    credentials: HTTPAuthorizationCredentials = Security(security),
     service: DiagramService = Depends(get_diagram_service),
 ) -> DiagramResponse | JSONResponse:
     """Generate a mindmap from a text description."""
-    api_key = get_bearer_token(request)
-    return _generate_and_respond(body, api_key, service, "generate_mindmap_from_description")
+    return _generate_and_respond(
+        body, credentials.credentials, service, "generate_mindmap_from_description"
+    )
 
 
 @router.post("/ui-mockup/generate", response_model=DiagramResponse)
 async def generate_ui_mockup(
     body: DiagramGenerateRequest,
-    request: Request,
+    credentials: HTTPAuthorizationCredentials = Security(security),
     service: DiagramService = Depends(get_diagram_service),
 ) -> DiagramResponse | JSONResponse:
     """Generate a UI mockup (SALT) from a text description."""
-    api_key = get_bearer_token(request)
-    return _generate_and_respond(body, api_key, service, "generate_ui_mockup_from_description")
+    return _generate_and_respond(
+        body, credentials.credentials, service, "generate_ui_mockup_from_description"
+    )
 
 
 @router.post("/gantt/generate", response_model=DiagramResponse)
 async def generate_gantt(
     body: DiagramGenerateRequest,
-    request: Request,
+    credentials: HTTPAuthorizationCredentials = Security(security),
     service: DiagramService = Depends(get_diagram_service),
 ) -> DiagramResponse | JSONResponse:
     """Generate a Gantt chart from a text description."""
-    api_key = get_bearer_token(request)
-    return _generate_and_respond(body, api_key, service, "generate_gantt_from_description")
+    return _generate_and_respond(
+        body, credentials.credentials, service, "generate_gantt_from_description"
+    )
 
 
 @router.post("/erd/generate", response_model=DiagramResponse)
 async def generate_erd(
     body: DiagramGenerateRequest,
-    request: Request,
+    credentials: HTTPAuthorizationCredentials = Security(security),
     service: DiagramService = Depends(get_diagram_service),
 ) -> DiagramResponse | JSONResponse:
     """Generate an ER diagram from a text description."""
-    api_key = get_bearer_token(request)
-    return _generate_and_respond(body, api_key, service, "generate_erd_from_description")
+    return _generate_and_respond(
+        body, credentials.credentials, service, "generate_erd_from_description"
+    )
 
 
 @router.post("/json/generate", response_model=DiagramResponse)
 async def generate_json(
     body: DiagramGenerateRequest,
-    request: Request,
+    credentials: HTTPAuthorizationCredentials = Security(security),
     service: DiagramService = Depends(get_diagram_service),
 ) -> DiagramResponse | JSONResponse:
     """Generate a JSON diagram from a text description."""
-    api_key = get_bearer_token(request)
-    return _generate_and_respond(body, api_key, service, "generate_json_from_description")
+    return _generate_and_respond(
+        body, credentials.credentials, service, "generate_json_from_description"
+    )
 
 
 @router.post("/c4/generate", response_model=DiagramResponse)
 async def generate_c4(
     body: DiagramGenerateRequest,
-    request: Request,
+    credentials: HTTPAuthorizationCredentials = Security(security),
     service: DiagramService = Depends(get_diagram_service),
 ) -> DiagramResponse | JSONResponse:
     """Generate a C4 diagram from a text description."""
-    api_key = get_bearer_token(request)
-    return _generate_and_respond(body, api_key, service, "generate_c4_from_description")
+    return _generate_and_respond(
+        body, credentials.credentials, service, "generate_c4_from_description"
+    )

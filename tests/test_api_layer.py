@@ -1,11 +1,11 @@
 """Tests for the v01 FastAPI API layer."""
 
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
-from unittest.mock import patch, MagicMock
 
 os.environ.setdefault("azure_proxy_key", "test-key")
 
@@ -32,7 +32,9 @@ VALID_GENERATE_BODY = {
 AUTH_HEADER = {"Authorization": "Bearer test-api-key"}
 
 
-def _fake_result(plantuml_code: str = "@startuml\n@enduml", msg: str = "ok") -> DiagramGenerationResult:
+def _fake_result(
+    plantuml_code: str = "@startuml\n@enduml", msg: str = "ok"
+) -> DiagramGenerationResult:
     return DiagramGenerationResult(
         plantuml_code=plantuml_code,
         pil_image=Image.new("RGB", (10, 10), color="white"),

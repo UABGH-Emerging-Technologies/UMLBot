@@ -7,11 +7,13 @@ import os
 
 os.environ.setdefault("azure_proxy_key", "test-key")
 
-import pytest
 from unittest.mock import Mock
-from UMLBot.diagram_handlers.uml_draft_handler import UMLDraftHandler
-from UMLBot.config.config import UMLBotConfig
+
+import pytest
 from aiweb_common.generate.GenericErrorHandler import GenericErrorHandler
+
+from UMLBot.config.config import UMLBotConfig
+from UMLBot.diagram_handlers.uml_draft_handler import UMLDraftHandler
 
 
 class DummyPrompt:

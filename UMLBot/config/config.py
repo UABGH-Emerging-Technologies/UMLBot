@@ -72,28 +72,18 @@ class UMLBotConfig:
     DEFAULT_DIAGRAM_TYPE = "Use Case"
 
     FALLBACK_PLANTUML_TEMPLATE = "@startuml\n' {diagram_type} diagram\n' {description}\n@enduml"
-    FALLBACK_MINDMAP_TEMPLATE = (
-        "@startmindmap\n* {diagram_type}\n** {description}\n@endmindmap"
-    )
-    FALLBACK_SALT_TEMPLATE = (
-        "@startsalt\n{diagram_type}\n{description}\n@endsalt"
-    )
-    FALLBACK_GANTT_TEMPLATE = (
-        "@startgantt\n[Task] lasts 1 day\n@endgantt"
-    )
-    FALLBACK_ERD_TEMPLATE = (
-        "@startuml\nentity \"Entity\" as E {\n  *id : int\n}\n@enduml"
-    )
-    FALLBACK_JSON_TEMPLATE = (
-        "@startjson\n{\n  \"sample\": true\n}\n@endjson"
-    )
+    FALLBACK_MINDMAP_TEMPLATE = "@startmindmap\n* {diagram_type}\n** {description}\n@endmindmap"
+    FALLBACK_SALT_TEMPLATE = "@startsalt\n{diagram_type}\n{description}\n@endsalt"
+    FALLBACK_GANTT_TEMPLATE = "@startgantt\n[Task] lasts 1 day\n@endgantt"
+    FALLBACK_ERD_TEMPLATE = '@startuml\nentity "Entity" as E {\n  *id : int\n}\n@enduml'
+    FALLBACK_JSON_TEMPLATE = '@startjson\n{\n  "sample": true\n}\n@endjson'
     FALLBACK_C4_TEMPLATE = (
         "@startuml\n"
         "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml\n"
         "title {diagram_type}\n"
-        "Person(user, \"User\", \"\")\n"
-        "System(system, \"System\", \"{description}\")\n"
-        "Rel(user, system, \"Uses\")\n"
+        'Person(user, "User", "")\n'
+        'System(system, "System", "{description}")\n'
+        'Rel(user, system, "Uses")\n'
         "@enduml"
     )
     DIAGRAM_SUCCESS_MSG = "Diagram generated successfully using LLM."

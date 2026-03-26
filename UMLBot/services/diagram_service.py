@@ -29,6 +29,7 @@ LOGGER = logging.getLogger(__name__)
 @dataclass
 class DiagramGenerationResult:
     """Result container for a UML generation request."""
+
     plantuml_code: str
     pil_image: Image.Image | None
     status_message: str
