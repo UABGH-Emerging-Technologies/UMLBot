@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.v01.dependencies import get_diagram_service
-from app.v01.schemas import RenderRequest, RenderResponse
+from app.v01.schemas import RenderRequest, RenderResponse, ResponseStatus
 from UMLBot.services.diagram_service import DiagramService
 
 LOGGER = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ def _render_and_respond(
         pil_image, status_msg, image_url = service.render_diagram_from_code(body.plantuml_code)
         image_base64 = service.diagram_image_to_base64(pil_image)
         return RenderResponse(
-            status="ok",
+            status=ResponseStatus.ok,
             image_base64=image_base64,
             image_url=image_url,
             message=status_msg,
@@ -34,7 +34,7 @@ def _render_and_respond(
         LOGGER.exception("Render failed")
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": "Internal server error"},
+            content={"status": ResponseStatus.error, "message": "Internal server error"},
         )
 
 

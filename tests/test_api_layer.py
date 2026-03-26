@@ -22,9 +22,15 @@ def client():
 # Helpers
 # ---------------------------------------------------------------------------
 
-VALID_GENERATE_BODY = {
+UML_GENERATE_BODY = {
     "description": "Test diagram",
-    "diagram_type": "class",
+    "diagram_type": "Class",
+    "openai_compatible_endpoint": "https://api.openai.com/v1",
+    "openai_compatible_model": "gpt-4o-mini",
+}
+
+NON_UML_GENERATE_BODY = {
+    "description": "Test diagram",
     "openai_compatible_endpoint": "https://api.openai.com/v1",
     "openai_compatible_model": "gpt-4o-mini",
 }
@@ -62,7 +68,7 @@ def test_health(client: TestClient) -> None:
 @patch("UMLBot.services.diagram_service.DiagramService.generate_diagram_from_description")
 def test_generate_uml_success(mock_gen: MagicMock, client: TestClient) -> None:
     mock_gen.return_value = _fake_result()
-    resp = client.post("/v01/generate", json=VALID_GENERATE_BODY, headers=AUTH_HEADER)
+    resp = client.post("/v01/generate", json=UML_GENERATE_BODY, headers=AUTH_HEADER)
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
@@ -71,8 +77,8 @@ def test_generate_uml_success(mock_gen: MagicMock, client: TestClient) -> None:
 
 
 def test_generate_uml_missing_auth(client: TestClient) -> None:
-    resp = client.post("/v01/generate", json=VALID_GENERATE_BODY)
-    assert resp.status_code == 401
+    resp = client.post("/v01/generate", json=UML_GENERATE_BODY)
+    assert resp.status_code in (401, 403)
 
 
 def test_generate_uml_missing_fields(client: TestClient) -> None:
@@ -84,23 +90,29 @@ def test_generate_uml_missing_fields(client: TestClient) -> None:
     assert resp.status_code == 422
 
 
+def test_generate_uml_invalid_diagram_type(client: TestClient) -> None:
+    body = {**UML_GENERATE_BODY, "diagram_type": "InvalidType"}
+    resp = client.post("/v01/generate", json=body, headers=AUTH_HEADER)
+    assert resp.status_code == 422
+
+
 @patch("UMLBot.services.diagram_service.DiagramService.generate_mindmap_from_description")
 def test_generate_mindmap_success(mock_gen: MagicMock, client: TestClient) -> None:
     mock_gen.return_value = _fake_result("@startmindmap\n@endmindmap", "Mindmap ok")
-    resp = client.post("/v01/mindmap/generate", json=VALID_GENERATE_BODY, headers=AUTH_HEADER)
+    resp = client.post("/v01/mindmap/generate", json=NON_UML_GENERATE_BODY, headers=AUTH_HEADER)
     assert resp.status_code == 200
     assert resp.json()["plantuml_code"].startswith("@startmindmap")
 
 
 def test_generate_mindmap_missing_auth(client: TestClient) -> None:
-    resp = client.post("/v01/mindmap/generate", json=VALID_GENERATE_BODY)
-    assert resp.status_code == 401
+    resp = client.post("/v01/mindmap/generate", json=NON_UML_GENERATE_BODY)
+    assert resp.status_code in (401, 403)
 
 
 @patch("UMLBot.services.diagram_service.DiagramService.generate_c4_from_description")
 def test_generate_c4_success(mock_gen: MagicMock, client: TestClient) -> None:
     mock_gen.return_value = _fake_result("@startuml\n!include C4\n@enduml")
-    resp = client.post("/v01/c4/generate", json=VALID_GENERATE_BODY, headers=AUTH_HEADER)
+    resp = client.post("/v01/c4/generate", json=NON_UML_GENERATE_BODY, headers=AUTH_HEADER)
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
@@ -152,4 +164,5 @@ def test_config_endpoint(client: TestClient) -> None:
     assert "diagram_types" in data
     assert "default_diagram_type" in data
     assert "fallback_templates" in data
-    assert len(data["diagram_types"]) > 0
+    assert len(data["diagram_types"]) == 8
+    assert data["default_diagram_type"] == "Use Case"

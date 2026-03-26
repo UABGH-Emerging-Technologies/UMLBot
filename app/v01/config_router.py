@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.v01.schemas import ConfigResponse
+from app.v01.schemas import ConfigResponse, UMLDiagramType
 from UMLBot.config.config import UMLBotConfig
 
 router = APIRouter(tags=["config"])
@@ -12,8 +12,8 @@ router = APIRouter(tags=["config"])
 async def get_config() -> ConfigResponse:
     """Return supported diagram types and fallback templates."""
     return ConfigResponse(
-        diagram_types=UMLBotConfig.DIAGRAM_TYPES,
-        default_diagram_type=UMLBotConfig.DEFAULT_DIAGRAM_TYPE,
+        diagram_types=list(UMLDiagramType),
+        default_diagram_type=UMLDiagramType(UMLBotConfig.DEFAULT_DIAGRAM_TYPE),
         fallback_templates={
             "uml": UMLBotConfig.FALLBACK_PLANTUML_TEMPLATE,
             "mindmap": UMLBotConfig.FALLBACK_MINDMAP_TEMPLATE,
