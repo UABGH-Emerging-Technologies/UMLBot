@@ -23,12 +23,15 @@ class DummyPrompt:
 
 
 def test_chat_uml_revision_with_error_handler(monkeypatch):
-    # Simulate a chat workflow where the first UML generation fails, then succeeds after correction
+    """UMLRetryManager inside process() handles transient LLM failures internally.
+
+    The first invoke() raises; process() retries and the second invoke() succeeds.
+    GenericErrorHandler never sees an error because process() resolves it.
+    """
     handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
     monkeypatch.setattr(handler, "check_content_type", lambda x: x)
 
-    # Simulate LLM interface: first call returns error, second call returns valid UML
     llm_calls = [Exception("LLM error"), "@startuml\nclass Foo\n@enduml"]
 
     class MockLLM:
@@ -38,40 +41,17 @@ def test_chat_uml_revision_with_error_handler(monkeypatch):
                 raise result
             return result
 
-    def operation():
-        try:
-            from UMLBot.diagram_handlers.uml_draft_handler import UMLRetryManager
+    from UMLBot.diagram_handlers.uml_draft_handler import UMLRetryManager
 
-            return handler.process(
-                "class",
-                "Foo system",
-                "bluegray",
-                llm_interface=MockLLM(),
-                retry_manager=UMLRetryManager(max_retries=2),
-            )
-        except Exception as e:
-            return e
-
-    def error_predicate(result):
-        return isinstance(result, Exception)
-
-    corrections = []
-
-    def correction_callback(attempt, last_result):
-        corrections.append((attempt, str(last_result)))
-
-    error_handler = GenericErrorHandler(
-        operation=operation,
-        error_predicate=error_predicate,
-        correction_callback=correction_callback,
-        max_retries=2,
+    result = handler.process(
+        "class",
+        "Foo system",
+        "bluegray",
+        llm_interface=MockLLM(),
+        retry_manager=UMLRetryManager(max_retries=2),
     )
-    result = error_handler.run()
-    # Defensive: result may be Exception or str
-    if isinstance(result, Exception):
-        assert False, f"Expected UML string, got Exception: {result}"
-    assert "@startuml" in str(result)
-    assert corrections == [(1, "LLM error")]
+    assert "@startuml" in result
+    assert "class Foo" in result
 
 
 def test_integration_respects_retry_limit(monkeypatch):
