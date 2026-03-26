@@ -3,11 +3,20 @@ Streamlit-based UMLBot frontend.
 
 Communicates with the FastAPI backend API endpoints to generate and render
 PlantUML diagrams across all supported diagram types.
-LLM credentials are supplied per-request via the sidebar (v1 paradigm).
+
+LLM credentials are centralized via aiweb_common (manage_sensitive) and config
+constants — the user never enters them.  The backend URL is read from the
+UMLBOT_ENDPOINT environment variable.
+
+NOTE FOR IMPLEMENTATION TEAM:
+  This file is a *proposal*.  The implementation team will integrate it as a
+  page inside ai_web_interface.  The sidebar is intentionally left empty so
+  that the multi-page sidebar navigation is not disrupted.
 """
 
 import base64
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,14 +24,35 @@ from typing import Any, Dict, List, Optional
 import requests
 import streamlit as st
 
-# Workaround for local llm_utils import
+# ---------------------------------------------------------------------------
+# Path setup (so aiweb_common / llm_utils resolve in standalone mode)
+# ---------------------------------------------------------------------------
 repo_root = Path(__file__).resolve().parent
 sys.path.append(str(repo_root / "llm_utils"))
 sys.path.append(str(repo_root))
 
-from aiweb_common.streamlit.page_renderer import StreamlitUIHelper
+from aiweb_common.streamlit.streamlit_common import apply_uab_font, hide_streamlit_branding
+from aiweb_common.WorkflowHandler import manage_sensitive
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Centralized LLM credentials (matches ai_web_interface config pattern)
+# ---------------------------------------------------------------------------
+
+UABMC_PROXY_ENDPOINT: str = manage_sensitive("azure_proxy_endpoint")
+UABMC_AZURE_KEY: str = manage_sensitive("azure_proxy_key")
+
+# PRO_CHAT in the ai_web_interface config — required for consistently
+# well-formed PlantUML output; lower-tier models produce syntax errors.
+MODEL_TO_USE: str = "gpt-5.2"
+
+# Backend URL from environment with localhost fallback for local dev
+API_BASE_URL: str = os.environ.get(
+    "UMLBOT_ENDPOINT", "http://localhost:8000"
+)
+
+DEFAULT_TIMEOUT: int = 120
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -52,19 +82,21 @@ ENDPOINT_MAP: Dict[str, tuple] = {
 MAX_HISTORY_MESSAGES: int = 10
 
 # ---------------------------------------------------------------------------
-# Remote config fetcher (replaces direct UMLBotConfig import)
+# Remote config fetcher
 # ---------------------------------------------------------------------------
 
 _remote_config: Optional[Dict[str, Any]] = None
 
 
-def _fetch_remote_config(backend_url: str) -> Dict[str, Any]:
+def _fetch_remote_config() -> Dict[str, Any]:
     """Fetch diagram types and fallback templates from the backend /v01/config endpoint."""
     global _remote_config  # noqa: PLW0603
     if _remote_config is not None:
         return _remote_config
     try:
-        resp = requests.get(f"{backend_url.rstrip('/')}/v01/config", timeout=10)
+        resp = requests.get(
+            f"{API_BASE_URL.rstrip('/')}/v01/config", timeout=10
+        )
         resp.raise_for_status()
         _remote_config = resp.json()
         return _remote_config
@@ -105,41 +137,64 @@ _MODE_FRIENDLY: Dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
-# API Client
+# API helpers (matches ai_web_interface API module pattern)
 # ---------------------------------------------------------------------------
 
 ApiResponse = Dict[str, Any]
 
 
+def _build_url(path: str) -> str:
+    return f"{API_BASE_URL.rstrip('/')}{path}"
+
+
+def _headers() -> Dict[str, str]:
+    """Build request headers with Bearer token from centralized credentials."""
+    h: Dict[str, str] = {
+        "accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    if UABMC_AZURE_KEY:
+        h["Authorization"] = f"Bearer {UABMC_AZURE_KEY}"
+    return h
+
+
+def _inject_llm_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Inject centralized LLM endpoint/model into the request payload."""
+    return {
+        **payload,
+        "openai_compatible_endpoint": UABMC_PROXY_ENDPOINT,
+        "openai_compatible_model": MODEL_TO_USE,
+    }
+
+
 def api_generate(
-    backend_url: str,
     mode: str,
     description: str,
     diagram_type: str,
     theme: Optional[str] = None,
-    openai_compatible_endpoint: str = "",
-    openai_compatible_model: str = "",
-    api_key: str = "",
 ) -> ApiResponse:
     """Call the backend generate endpoint for the given mode.
 
-    Includes per-request LLM credentials per v1 paradigm.
+    LLM credentials are injected from centralized config — callers do not
+    supply them.
     """
-    generate_path = ENDPOINT_MAP[mode][0]
-    url = f"{backend_url.rstrip('/')}{generate_path}"
-    payload: Dict[str, Any] = {
-        "description": description,
-        "diagram_type": diagram_type,
-        "openai_compatible_endpoint": openai_compatible_endpoint,
-        "openai_compatible_model": openai_compatible_model,
-    }
+    generate_path: str = ENDPOINT_MAP[mode][0]
+    payload: Dict[str, Any] = {"description": description}
+    # UML endpoint requires diagram_type; others ignore it
+    if mode == "uml":
+        payload["diagram_type"] = diagram_type
     if theme:
         payload["theme"] = theme
-    headers: Dict[str, str] = {}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+
+    body = _inject_llm_fields(payload)
+
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=120)
+        resp = requests.post(
+            _build_url(generate_path),
+            json=body,
+            headers=_headers(),
+            timeout=DEFAULT_TIMEOUT,
+        )
         resp.raise_for_status()
         data = resp.json()
         return {
@@ -163,12 +218,12 @@ def api_generate(
             "plantuml_code": "",
             "image_base64": None,
             "image_url": "",
-            "message": f"Cannot connect to backend at {backend_url}. Is it running?",
+            "message": f"Cannot connect to backend at {API_BASE_URL}. Is it running?",
         }
     except requests.exceptions.HTTPError as exc:
-        body = {}
+        body_json: Dict[str, Any] = {}
         try:
-            body = exc.response.json()
+            body_json = exc.response.json()
         except Exception:
             pass
         return {
@@ -176,7 +231,9 @@ def api_generate(
             "plantuml_code": "",
             "image_base64": None,
             "image_url": "",
-            "message": body.get("message", body.get("detail", f"HTTP {exc.response.status_code}")),
+            "message": body_json.get(
+                "message", body_json.get("detail", f"HTTP {exc.response.status_code}")
+            ),
         }
     except Exception as exc:
         return {
@@ -189,16 +246,16 @@ def api_generate(
 
 
 def api_render(
-    backend_url: str,
     mode: str,
     plantuml_code: str,
 ) -> ApiResponse:
     """Call the backend render endpoint for the given mode (no auth required)."""
-    render_path = ENDPOINT_MAP[mode][1]
-    url = f"{backend_url.rstrip('/')}{render_path}"
-    payload = {"plantuml_code": plantuml_code}
+    render_path: str = ENDPOINT_MAP[mode][1]
+    payload: Dict[str, Any] = {"plantuml_code": plantuml_code}
     try:
-        resp = requests.post(url, json=payload, timeout=60)
+        resp = requests.post(
+            _build_url(render_path), json=payload, timeout=60
+        )
         resp.raise_for_status()
         data = resp.json()
         return {
@@ -222,12 +279,12 @@ def api_render(
             "plantuml_code": plantuml_code,
             "image_base64": None,
             "image_url": "",
-            "message": f"Cannot connect to backend at {backend_url}. Is it running?",
+            "message": f"Cannot connect to backend at {API_BASE_URL}. Is it running?",
         }
     except requests.exceptions.HTTPError as exc:
-        body = {}
+        body_json: Dict[str, Any] = {}
         try:
-            body = exc.response.json()
+            body_json = exc.response.json()
         except Exception:
             pass
         return {
@@ -235,7 +292,7 @@ def api_render(
             "plantuml_code": plantuml_code,
             "image_base64": None,
             "image_url": "",
-            "message": body.get("message", f"HTTP {exc.response.status_code}"),
+            "message": body_json.get("message", f"HTTP {exc.response.status_code}"),
         }
     except Exception as exc:
         return {
@@ -271,16 +328,16 @@ def _build_prompt_description(
     diagram_type: str,
 ) -> str:
     """Compose a full description to send as the ``description`` field to the backend."""
-    fence = _FENCE_MARKERS.get(mode, "@startuml and @enduml")
-    friendly = _MODE_FRIENDLY.get(mode, "UML")
+    fence: str = _FENCE_MARKERS.get(mode, "@startuml and @enduml")
+    friendly: str = _MODE_FRIENDLY.get(mode, "UML")
 
-    code_label = (
+    code_label: str = (
         f"Existing PlantUML {friendly} diagram (reuse and refine rather than restart):"
         if current_code.strip()
         else f"No {friendly} diagram has been created yet. Create a fresh PlantUML {friendly} diagram."
     )
 
-    chat_summary = _summarize_chat_history(chat_history)
+    chat_summary: str = _summarize_chat_history(chat_history)
 
     sections: List[str] = [
         f"You are an expert {friendly} assistant following the prompty template rules.",
@@ -327,97 +384,12 @@ def _init_session_state(config: Dict[str, Any]) -> None:
             if key not in st.session_state:
                 st.session_state[key] = default
 
-    # Global state
-    if "backend_url" not in st.session_state:
-        st.session_state["backend_url"] = "http://localhost:8000"
     if "theme" not in st.session_state:
         st.session_state["theme"] = ""
     if "uml_subtype" not in st.session_state:
-        st.session_state["uml_subtype"] = config.get("default_diagram_type", "Use Case")
-    if "openai_compatible_endpoint" not in st.session_state:
-        st.session_state["openai_compatible_endpoint"] = ""
-    if "openai_compatible_model" not in st.session_state:
-        st.session_state["openai_compatible_model"] = ""
-    if "api_key" not in st.session_state:
-        st.session_state["api_key"] = ""
-
-
-# ---------------------------------------------------------------------------
-# Sidebar
-# ---------------------------------------------------------------------------
-
-
-def _render_sidebar(ui: StreamlitUIHelper, current_mode: str, config: Dict[str, Any]) -> None:
-    """Render the sidebar controls."""
-    with st.sidebar:
-        ui.header("Settings")
-
-        st.session_state["backend_url"] = ui.text_input(
-            "Backend URL",
-            value=st.session_state["backend_url"],
-            key="sidebar_backend_url",
+        st.session_state["uml_subtype"] = config.get(
+            "default_diagram_type", "Use Case"
         )
-
-        ui.markdown("---")
-        ui.subheader("LLM Credentials")
-
-        st.session_state["openai_compatible_endpoint"] = ui.text_input(
-            "OpenAI-Compatible Endpoint",
-            value=st.session_state["openai_compatible_endpoint"],
-            key="sidebar_endpoint",
-        )
-
-        st.session_state["openai_compatible_model"] = ui.text_input(
-            "Model Name",
-            value=st.session_state["openai_compatible_model"],
-            key="sidebar_model",
-        )
-
-        st.session_state["api_key"] = st.text_input(
-            "API Key",
-            value=st.session_state["api_key"],
-            type="password",
-            key="sidebar_api_key",
-        )
-
-        ui.markdown("---")
-
-        st.session_state["theme"] = ui.text_input(
-            "PlantUML Theme (optional)",
-            value=st.session_state["theme"],
-            key="sidebar_theme",
-        )
-
-        ui.markdown("---")
-
-        if ui.button("Clear Chat History", key="clear_history"):
-            st.session_state[_state_key(current_mode, "chat_history")] = []
-            st.session_state[_state_key(current_mode, "status_message")] = ""
-            st.session_state[_state_key(current_mode, "error_message")] = ""
-            st.rerun()
-
-        # Download PlantUML code
-        code = st.session_state.get(_state_key(current_mode, "plantuml_code"), "")
-        if code:
-            ui.download_button(
-                label="Download PlantUML Code",
-                data=code,
-                file_name=f"{current_mode}_diagram.puml",
-                mime="text/plain",
-                key="dl_code",
-            )
-
-        # Download image
-        img_b64 = st.session_state.get(_state_key(current_mode, "image_base64"))
-        if img_b64:
-            img_bytes = base64.b64decode(img_b64)
-            ui.download_button(
-                label="Download Image (PNG)",
-                data=img_bytes,
-                file_name=f"{current_mode}_diagram.png",
-                mime="image/png",
-                key="dl_image",
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -426,31 +398,30 @@ def _render_sidebar(ui: StreamlitUIHelper, current_mode: str, config: Dict[str, 
 
 
 def _handle_chat_input(
-    ui: StreamlitUIHelper,
     mode: str,
     user_message: str,
     config: Dict[str, Any],
 ) -> None:
     """Process a new chat message: call backend generate, update state."""
-    history_key = _state_key(mode, "chat_history")
-    code_key = _state_key(mode, "plantuml_code")
-    img_key = _state_key(mode, "image_base64")
-    status_key = _state_key(mode, "status_message")
-    error_key = _state_key(mode, "error_message")
+    history_key: str = _state_key(mode, "chat_history")
+    code_key: str = _state_key(mode, "plantuml_code")
+    img_key: str = _state_key(mode, "image_base64")
+    status_key: str = _state_key(mode, "status_message")
+    error_key: str = _state_key(mode, "error_message")
 
-    # Append user message
     history: List[Dict[str, str]] = st.session_state[history_key]
     history.append({"role": "user", "content": user_message})
 
-    current_code = st.session_state.get(code_key, "")
+    current_code: str = st.session_state.get(code_key, "")
 
-    # Determine diagram_type
     if mode == "uml":
-        diagram_type = st.session_state.get("uml_subtype", config.get("default_diagram_type", "Use Case"))
+        diagram_type: str = st.session_state.get(
+            "uml_subtype", config.get("default_diagram_type", "Use Case")
+        )
     else:
         diagram_type = ENDPOINT_MAP[mode][2]
 
-    description = _build_prompt_description(
+    description: str = _build_prompt_description(
         user_request=user_message,
         current_code=current_code,
         chat_history=history,
@@ -458,18 +429,14 @@ def _handle_chat_input(
         diagram_type=diagram_type,
     )
 
-    theme = st.session_state.get("theme") or None
+    theme: Optional[str] = st.session_state.get("theme") or None
 
-    with ui.spinner("Generating diagram..."):
+    with st.spinner("Generating diagram..."):
         result = api_generate(
-            backend_url=st.session_state["backend_url"],
             mode=mode,
             description=description,
             diagram_type=diagram_type,
             theme=theme,
-            openai_compatible_endpoint=st.session_state.get("openai_compatible_endpoint", ""),
-            openai_compatible_model=st.session_state.get("openai_compatible_model", ""),
-            api_key=st.session_state.get("api_key", ""),
         )
 
     if result["status"] == "ok":
@@ -485,32 +452,27 @@ def _handle_chat_input(
     else:
         st.session_state[error_key] = result.get("message", "Generation failed.")
         st.session_state[status_key] = ""
-        history.append({"role": "assistant", "content": f"Error: {result.get('message', '')}"})
+        history.append(
+            {"role": "assistant", "content": f"Error: {result.get('message', '')}"}
+        )
 
     st.session_state[history_key] = history
 
 
-def _handle_rerender(
-    ui: StreamlitUIHelper,
-    mode: str,
-) -> None:
+def _handle_rerender(mode: str) -> None:
     """Re-render diagram from the current code in the editor."""
-    code_key = _state_key(mode, "plantuml_code")
-    img_key = _state_key(mode, "image_base64")
-    status_key = _state_key(mode, "status_message")
-    error_key = _state_key(mode, "error_message")
+    code_key: str = _state_key(mode, "plantuml_code")
+    img_key: str = _state_key(mode, "image_base64")
+    status_key: str = _state_key(mode, "status_message")
+    error_key: str = _state_key(mode, "error_message")
 
-    code = st.session_state.get(code_key, "")
+    code: str = st.session_state.get(code_key, "")
     if not code.strip():
         st.session_state[error_key] = "No PlantUML code to render."
         return
 
-    with ui.spinner("Rendering diagram..."):
-        result = api_render(
-            backend_url=st.session_state["backend_url"],
-            mode=mode,
-            plantuml_code=code,
-        )
+    with st.spinner("Rendering diagram..."):
+        result = api_render(mode=mode, plantuml_code=code)
 
     if result["status"] == "ok" and result["image_base64"]:
         st.session_state[img_key] = result["image_base64"]
@@ -521,82 +483,122 @@ def _handle_rerender(
         st.session_state[status_key] = ""
 
 
-def _render_mode_tab(ui: StreamlitUIHelper, mode: str, config: Dict[str, Any]) -> None:
+def _render_mode_tab(mode: str, config: Dict[str, Any]) -> None:
     """Render the contents of a single diagram mode tab."""
-    history_key = _state_key(mode, "chat_history")
-    code_key = _state_key(mode, "plantuml_code")
-    img_key = _state_key(mode, "image_base64")
-    status_key = _state_key(mode, "status_message")
-    error_key = _state_key(mode, "error_message")
+    history_key: str = _state_key(mode, "chat_history")
+    code_key: str = _state_key(mode, "plantuml_code")
+    img_key: str = _state_key(mode, "image_base64")
+    status_key: str = _state_key(mode, "status_message")
+    error_key: str = _state_key(mode, "error_message")
 
     # UML sub-type dropdown (only for uml mode)
-    diagram_types = config.get("diagram_types", ["Use Case", "Class", "Sequence"])
+    diagram_types: List[str] = config.get(
+        "diagram_types", ["Use Case", "Class", "Sequence"]
+    )
     if mode == "uml":
-        current_subtype = st.session_state.get("uml_subtype", config.get("default_diagram_type", "Use Case"))
-        idx = diagram_types.index(current_subtype) if current_subtype in diagram_types else 0
-        st.session_state["uml_subtype"] = ui.selectbox(
+        current_subtype: str = st.session_state.get(
+            "uml_subtype", config.get("default_diagram_type", "Use Case")
+        )
+        idx: int = (
+            diagram_types.index(current_subtype)
+            if current_subtype in diagram_types
+            else 0
+        )
+        st.session_state["uml_subtype"] = st.selectbox(
             "UML Diagram Type",
             options=diagram_types,
             index=idx,
             key=f"uml_subtype_select_{mode}",
         )
 
+    # Optional PlantUML theme
+    st.session_state["theme"] = st.text_input(
+        "PlantUML Theme (optional)",
+        value=st.session_state.get("theme", ""),
+        key=f"theme_input_{mode}",
+    )
+
     # Chat history display
     history: List[Dict[str, str]] = st.session_state.get(history_key, [])
     for msg in history:
-        role = msg.get("role", "user")
-        display_role = "user" if role == "user" else "assistant"
+        role: str = msg.get("role", "user")
+        display_role: str = "user" if role == "user" else "assistant"
         with st.chat_message(display_role):
             st.markdown(msg.get("content", ""))
 
     # Chat input
-    user_input = st.chat_input(
+    user_input: Optional[str] = st.chat_input(
         f"Describe your {MODE_LABELS[mode].lower()}...",
         key=f"chat_input_{mode}",
     )
 
     if user_input:
-        _handle_chat_input(ui, mode, user_input, config)
+        _handle_chat_input(mode, user_input, config)
         st.rerun()
 
     # Two-column layout: code editor | image preview
-    col1, col2 = ui.columns(2)
+    col1, col2 = st.columns(2)
 
     with col1:
-        ui.subheader("PlantUML Code")
-        new_code = st.text_area(
+        st.subheader("PlantUML Code")
+        new_code: str = st.text_area(
             "Edit PlantUML code",
             value=st.session_state.get(code_key, ""),
             height=400,
             key=f"code_editor_{mode}",
             label_visibility="collapsed",
         )
-        # Sync editor back to state
         if new_code != st.session_state.get(code_key, ""):
             st.session_state[code_key] = new_code
 
-        if ui.button("Re-render", key=f"rerender_{mode}"):
-            _handle_rerender(ui, mode)
-            st.rerun()
+        btn_col1, btn_col2, btn_col3 = st.columns(3)
+        with btn_col1:
+            if st.button("Re-render", key=f"rerender_{mode}"):
+                _handle_rerender(mode)
+                st.rerun()
+        with btn_col2:
+            code: str = st.session_state.get(code_key, "")
+            if code:
+                st.download_button(
+                    label="Download Code",
+                    data=code,
+                    file_name=f"{mode}_diagram.puml",
+                    mime="text/plain",
+                    key=f"dl_code_{mode}",
+                )
+        with btn_col3:
+            if st.button("Clear History", key=f"clear_history_{mode}"):
+                st.session_state[history_key] = []
+                st.session_state[status_key] = ""
+                st.session_state[error_key] = ""
+                st.rerun()
 
     with col2:
-        ui.subheader("Diagram Preview")
-        img_b64 = st.session_state.get(img_key)
+        st.subheader("Diagram Preview")
+        img_b64: Optional[str] = st.session_state.get(img_key)
         if img_b64:
             st.image(
                 f"data:image/png;base64,{img_b64}",
                 use_container_width=True,
             )
+            img_bytes: bytes = base64.b64decode(img_b64)
+            st.download_button(
+                label="Download Image (PNG)",
+                data=img_bytes,
+                file_name=f"{mode}_diagram.png",
+                mime="image/png",
+                key=f"dl_image_{mode}",
+            )
         else:
-            ui.info("No diagram rendered yet. Send a message or click Re-render.")
+            st.info("No diagram rendered yet. Send a message or click Re-render.")
 
     # Status bar
-    status_msg = st.session_state.get(status_key, "")
-    error_msg = st.session_state.get(error_key, "")
+    status_msg: str = st.session_state.get(status_key, "")
+    error_msg: str = st.session_state.get(error_key, "")
     if error_msg:
-        ui.error(error_msg)
+        st.error(error_msg)
     elif status_msg:
-        ui.success(status_msg)
+        st.success(status_msg)
 
 
 # ---------------------------------------------------------------------------
@@ -604,35 +606,45 @@ def _render_mode_tab(ui: StreamlitUIHelper, mode: str, config: Dict[str, Any]) -
 # ---------------------------------------------------------------------------
 
 
-def main() -> None:
-    """Entry point for the Streamlit UMLBot frontend."""
-    ui = StreamlitUIHelper()
-    StreamlitUIHelper.setup_page("UMLBot", page_icon="📐", hide_branding=True)
+def show_umlbot_page() -> None:
+    """Entry point for the UMLBot page.
 
-    # Fetch config from backend (with fallback defaults)
-    backend_url = st.session_state.get("backend_url", "http://localhost:8000")
-    config = _fetch_remote_config(backend_url)
+    Named ``show_*_page`` to match ai_web_interface page conventions.
+    When the implementation team integrates this as a numbered page, they
+    should call this function from the page script.
+    """
+    page_title: str = "UMLBot"
+    page_icon: str = "📐"
 
+    st.set_page_config(page_title=page_title, page_icon=page_icon)
+    hide_streamlit_branding()
+    apply_uab_font()
+
+    st.title(f"{page_icon} {page_title}")
+    st.markdown(
+        """
+        **Interactive diagram generation powered by LLM + PlantUML**
+
+        Describe what you want in plain language and the AI will generate
+        PlantUML code and render it.  You can iterate on the diagram through
+        the chat, or edit the code directly and re-render.
+
+        ---
+        """
+    )
+
+    config: Dict[str, Any] = _fetch_remote_config()
     _init_session_state(config)
 
-    ui.title("UMLBot")
-    ui.markdown("Interactive diagram generation powered by LLM + PlantUML")
-
-    # Build tabs for each mode
-    tab_labels = list(MODE_LABELS.values())
-    tabs = ui.tabs(tab_labels)
-
-    mode_keys = list(MODE_LABELS.keys())
-
-    if "active_mode" not in st.session_state:
-        st.session_state["active_mode"] = mode_keys[0]
+    # Build tabs for each diagram mode
+    tab_labels: List[str] = list(MODE_LABELS.values())
+    tabs = st.tabs(tab_labels)
+    mode_keys: List[str] = list(MODE_LABELS.keys())
 
     for tab, mode_key in zip(tabs, mode_keys):
         with tab:
-            _render_mode_tab(ui, mode_key, config)
-
-    _render_sidebar(ui, st.session_state.get("active_mode", "uml"), config)
+            _render_mode_tab(mode_key, config)
 
 
 if __name__ == "__main__":
-    main()
+    show_umlbot_page()
