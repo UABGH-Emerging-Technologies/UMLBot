@@ -5,7 +5,7 @@ description = "PoC"
 requires-python = ">=3.11"
 dependencies = [
     # Runtime ---------------------------------------------------------------
-    "llm-utils @ git+https://github.com/UABPeriopAI/llm_utils.git@develop",
+    "aiweb-common @ git+https://github.com/UABPeriopAI/llm_utils.git@develop",
     "fastapi>=0.118.3",
     "Pillow",
     "python-multipart>=0.0.20",
@@ -64,7 +64,7 @@ include_trailing_comma = true
 virtual_env = "venv"
 
 [tool.uv.sources]
-llm-utils = { git = "https://github.com/UABPeriopAI/llm_utils.git", branch = "develop" }
+aiweb-common = { git = "https://github.com/UABPeriopAI/llm_utils.git", branch = "develop" }
 
 [build-system]
 requires = ["setuptools>=61"]
