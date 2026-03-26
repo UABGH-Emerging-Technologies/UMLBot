@@ -1,8 +1,11 @@
 FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
+LABEL org.opencontainers.image.source=https://github.com/UABGH-Emerging-Technologies/UMLBot
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         default-jre-headless \
+        git \
         graphviz \
         fonts-dejavu-core \
         unixodbc \
