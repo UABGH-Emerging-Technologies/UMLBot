@@ -31,7 +31,7 @@ def test_error_detection_and_correction(monkeypatch):
         return isinstance(result, Exception)
 
     def correction_callback(attempt, last_result):
-        correction_calls.append((attempt, last_result))
+        correction_calls.append((attempt, str(last_result)))
 
     handler = GenericErrorHandler(
         operation=operation,
@@ -40,7 +40,7 @@ def test_error_detection_and_correction(monkeypatch):
         max_retries=2,
     )
     assert handler.run() == "success"
-    assert correction_calls == [(1, Exception("fail"))]
+    assert correction_calls == [(1, "fail")]
 
 
 def test_retry_limit_enforced():

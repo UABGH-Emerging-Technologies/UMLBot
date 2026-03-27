@@ -3,58 +3,35 @@ SHELL = /bin/bash
 # help
 .PHONY: help
 help:
-    @echo "Commands:"
-    @echo "venv          : creates a virtual environment."
-    @echo "style         : executes style formatting."
-    @echo "clean         : cleans all unnecessary files."
-    @echo "docs          : builds documentation with mkdocs."
-    @echo "plantuml-up   : starts standalone PlantUML server container (dev)."
-    @echo "plantuml-logs : tails PlantUML server logs."
-    @echo "plantuml-down : stops standalone PlantUML server container."
-    @echo "docker-build  : builds the unified single-container image."
-    @echo "docker-up     : starts the full stack (single container)."
-    @echo "docker-down   : stops the full stack."
-    @echo "docker-logs   : tails full-stack logs."
+	@echo "Commands:"
+	@echo "venv          : creates a virtual environment."
+	@echo "style         : executes style formatting."
+	@echo "clean         : cleans all unnecessary files."
+	@echo "docs          : builds documentation with mkdocs."
+	@echo "run           : starts the FastAPI server locally."
+	@echo "streamlit     : starts the Streamlit frontend."
+	@echo "docker-build  : builds the single-container image."
+	@echo "docker-up     : starts the container."
+	@echo "docker-down   : stops the container."
+	@echo "docker-logs   : tails container logs."
 # Styling
 .PHONY: style
 style:
-	black UMLBot app tests gradio_app.py streamlit_app.py setup.py __init__.py
+	black UMLBot app tests streamlit_app.py __init__.py
 	flake8
-	python3 -m isort UMLBot app tests gradio_app.py streamlit_app.py setup.py __init__.py
-	autopep8 --recursive --aggressive --aggressive UMLBot app tests gradio_app.py streamlit_app.py setup.py __init__.py
+	python3 -m isort UMLBot app tests streamlit_app.py __init__.py
+	autopep8 --recursive --aggressive --aggressive UMLBot app tests streamlit_app.py __init__.py
 # Environment
 .ONESHELL:
 venv:
 	uv venv .venv --clear
 	source .venv/bin/activate && \
-	uv add setuptools wheel && \
-	uv add -r requirements.txt &&\
-	uv pip install -e ".[dev]"
+	uv sync
 
-.PHONY: npm-install
-npm-install:
-	cd app/frontend && npm install
-
-.PHONY: npm-build
-npm-build:
-	cd app/frontend && npm run build
-
-.PHONY: npm-dev
-npm-dev:
-	cd app/frontend && npm run dev
-
-# Local PlantUML server (standalone, for development without Docker)
-.PHONY: plantuml-up
-plantuml-up:
-	docker run -d --name umlbot-plantuml -p 8080:8080 --restart unless-stopped plantuml/plantuml-server:jetty
-
-.PHONY: plantuml-down
-plantuml-down:
-	docker rm -f umlbot-plantuml 2>/dev/null || true
-
-.PHONY: plantuml-logs
-plantuml-logs:
-	docker logs -f umlbot-plantuml
+# Run the FastAPI server locally
+.PHONY: run
+run:
+	PYTHONPATH=$(PWD) .venv/bin/python app/server.py
 
 # Streamlit frontend
 .PHONY: streamlit
@@ -86,7 +63,7 @@ test:
 docs:
 	.venv/bin/mkdocs build
 	.venv/bin/mkdocs serve -a 0.0.0.0:8000
-	
+
 # Cleaning
 .PHONY: clean
 clean: style

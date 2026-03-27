@@ -1,19 +1,12 @@
 services:
   umlbot:
-    build:
-      context: .
-      dockerfile: Docker/Dockerfile
+    build: .
     env_file:
       - .env
-    environment:
-      UMLBOT_SINGLE_CONTAINER: "true"
-      UMLBOT_CORS_ALLOW_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
     ports:
-      - "3000:3000"
-      - "7860:7860"
-      - "8080:8080"
+      - "8000:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 10
