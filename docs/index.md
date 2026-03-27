@@ -29,7 +29,7 @@ Optional:
 
 ### Main Documentation
 
-- [Workflows](UMLBot/uml_draft_handler.md): main workflows.
+- [Workflows](UMLBot/diagram_handlers/uml_draft_handler.md): main workflows.
 - [Configuration](UMLBot/config/config.md): Configuration Details
 - [User Interface](UMLBot_streamlit_app.md)
 - [Architecture Overview](architecture.md)

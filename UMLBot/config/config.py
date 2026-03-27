@@ -5,8 +5,6 @@ import logging.config
 import os
 from pathlib import Path
 
-from aiweb_common.WorkflowHandler import manage_sensitive
-
 
 def _load_env_file(path: Path) -> None:
     """Load simple KEY=VALUE pairs from a .env file without overriding existing envs."""
@@ -40,23 +38,14 @@ class UMLBotConfig:
     """
     Configuration class for UMLBot.
 
-    Sensitive values (e.g., LLM_API_KEY) are retrieved using manage_sensitive for secure handling.
-    If the secret is not found, a default value is used.
-
-    Example:
-        try:
-            api_key = manage_sensitive("OPENAI_API_KEY")
-        except KeyError:
-            api_key = "sk-..."
-
-    Raises:
-        KeyError: If manage_sensitive is called and the secret is not found, unless fallback is provided.
+    LLM credentials are supplied per-request (v1 paradigm).
+    Only non-LLM settings are stored here.
 
     Directories prepopulated in the template:
         BASE_DIR, CONFIG_DIR, LOGS_DIR, DATA_DIR, RAW_DATA, INTERMEDIATE_DIR, RESULTS_DIR
 
     See Also:
-        llm_utils.aiweb_common.WorkflowHandler.manage_sensitive
+        azurify.md for the v1 credential paradigm.
     """
 
     BASE_DIR = Path(__file__).parent.parent.absolute()
@@ -68,11 +57,6 @@ class UMLBotConfig:
     RAW_DATA = Path(DATA_DIR, "raw")
     INTERMEDIATE_DIR = Path(DATA_DIR, "intermediate")
     RESULTS_DIR = Path(DATA_DIR, "results")
-
-    # Assets
-    # Add assets here as needed.
-    HEADER_MARKDOWN = """# EXAMPLE Header Markdown \r todo - update this """
-    EXAMPLE_OUTPUT = Path(INTERMEDIATE_DIR, "Example_Output.csv")
 
     # UML Diagram Generator App Configs
     DIAGRAM_TYPES = [
@@ -86,48 +70,39 @@ class UMLBotConfig:
         "Sequence",
     ]
     DEFAULT_DIAGRAM_TYPE = "Use Case"
-    DEFAULT_INPUT = "Test"
-    SYSTEM_PROMPT_TEMPLATE = (
-        "Convert the following description into a PlantUML {diagram_type} diagram.\n{input}"
-    )
+
     FALLBACK_PLANTUML_TEMPLATE = "@startuml\n' {diagram_type} diagram\n' {description}\n@enduml"
-    API_KEY_MISSING_MSG = (
-        "LLM API key or base URL not found. Please ensure UMLBOT_LLM_API_KEY and "
-        "UMLBOT_LLM_API_BASE are set (via /run/secrets, /workspaces/*/secrets, or "
-        "environment variables)."
+    FALLBACK_MINDMAP_TEMPLATE = (
+        "@startmindmap\n* {diagram_type}\n** {description}\n@endmindmap"
+    )
+    FALLBACK_SALT_TEMPLATE = (
+        "@startsalt\n{diagram_type}\n{description}\n@endsalt"
+    )
+    FALLBACK_GANTT_TEMPLATE = (
+        "@startgantt\n[Task] lasts 1 day\n@endgantt"
+    )
+    FALLBACK_ERD_TEMPLATE = (
+        "@startuml\nentity \"Entity\" as E {\n  *id : int\n}\n@enduml"
+    )
+    FALLBACK_JSON_TEMPLATE = (
+        "@startjson\n{\n  \"sample\": true\n}\n@endjson"
+    )
+    FALLBACK_C4_TEMPLATE = (
+        "@startuml\n"
+        "!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml\n"
+        "title {diagram_type}\n"
+        "Person(user, \"User\", \"\")\n"
+        "System(system, \"System\", \"{description}\")\n"
+        "Rel(user, system, \"Uses\")\n"
+        "@enduml"
     )
     DIAGRAM_SUCCESS_MSG = "Diagram generated successfully using LLM."
-    _DEFAULT_PLANTUML_TEMPLATE = "http://localhost:8080/png/{encoded}"
-    _RUNNING_IN_DOCKER = Path("/.dockerenv").exists()
-    if _RUNNING_IN_DOCKER:
-        _DEFAULT_PLANTUML_TEMPLATE = "http://plantuml:8080/png/{encoded}"
-    PLANTUML_SERVER_URL_TEMPLATE = os.getenv(
-        "UMLBOT_PLANTUML_SERVER_URL_TEMPLATE",
-        _DEFAULT_PLANTUML_TEMPLATE,
+
+    # PlantUML JAR rendering
+    PLANTUML_JAR_PATH = os.getenv(
+        "UMLBOT_PLANTUML_JAR_PATH",
+        "/opt/plantuml/plantuml.jar",
     )
-    if _RUNNING_IN_DOCKER and PLANTUML_SERVER_URL_TEMPLATE.startswith(
-        ("http://localhost:8080", "http://127.0.0.1:8080")
-    ):
-        PLANTUML_SERVER_URL_TEMPLATE = PLANTUML_SERVER_URL_TEMPLATE.replace(
-            "http://localhost:8080", "http://plantuml:8080"
-        ).replace("http://127.0.0.1:8080", "http://plantuml:8080")
-
-    # LLM Configuration
-    # For security, prefer to set LLM_API_KEY as an environment variable.
-    try:
-        LLM_API_KEY = manage_sensitive("azure_proxy_key")
-    except KeyError:
-        LLM_API_KEY = os.getenv("UMLBOT_LLM_API_KEY", "")
-    LLM_MODEL = os.getenv("UMLBOT_LLM_MODEL", "gpt-4o-mini")
-    LLM_API_BASE = os.getenv("UMLBOT_LLM_API_BASE", "")
-    CORS_ALLOW_ORIGINS = os.getenv("UMLBOT_CORS_ALLOW_ORIGINS", "")
-    if CORS_ALLOW_ORIGINS:
-        CORS_ALLOW_ORIGINS = [origin.strip() for origin in CORS_ALLOW_ORIGINS.split(",")]
-    else:
-        CORS_ALLOW_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
-    # If using Azure, set LLM_API_BASE to your Azure endpoint and adjust model name as needed.
-
-    # MLFlow model registry
 
 
 # Make sure log directory exists
@@ -147,7 +122,7 @@ logging_config = {
             "class": "rich.logging.RichHandler",
             "level": logging.DEBUG,
             "formatter": "minimal",
-            "markup": True,  # Pass argument to RichHandler
+            "markup": True,
         },
         "info": {
             "class": "logging.handlers.RotatingFileHandler",

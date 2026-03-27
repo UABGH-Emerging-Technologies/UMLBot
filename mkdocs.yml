@@ -11,7 +11,7 @@ nav:
     - API Server: 'UMLBot/api_server.md'
     - Exceptions: 'UMLBot/exceptions.md'
     - LLM Interface: 'UMLBot/llm_interface.md'
-    - UML Draft Handler: 'UMLBot/uml_draft_handler.md'
+    - UML Draft Handler: 'UMLBot/diagram_handlers/uml_draft_handler.md'
     - Services:
       - Init: 'UMLBot/services/__init__.md'
       - Diagram Service: 'UMLBot/services/diagram_service.md'

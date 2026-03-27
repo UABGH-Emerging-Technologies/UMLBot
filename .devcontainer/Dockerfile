@@ -1,4 +1,4 @@
-# Base from Microsoft DevContainers Miniconda Python image
+# Base from Microsoft DevContainers Python image
 ARG VARIANT="3.11-bullseye"
 FROM mcr.microsoft.com/devcontainers/python:0-${VARIANT}
 
@@ -16,15 +16,7 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list /usr/share/keyrings/yarn.gpg \
         libxext6 \
         libxrender-dev \
         fonts-dejavu-core \
+        default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
-RUN if [ "${NODE_VERSION}" != "none" ]; then \
-        curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" | bash - \
-        && apt-get update \
-        && apt-get install -y --no-install-recommends nodejs \
-        && rm -rf /var/lib/apt/lists/* \
-        && node --version \
-        && npm --version; \
-    fi
-RUN apt-cache policy nodejs && which npm || true
 USER vscode

@@ -1,7 +1,7 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
 // https://github.com/microsoft/vscode-dev-containers/tree/v0.217.4/containers/python-3-miniconda
 {
-	"name": "Nvidia Devel",
+	"name": "UMLBot Dev",
 	"dockerComposeFile": [
 		"docker-compose.yml"
 	],
@@ -9,18 +9,15 @@
 	"workspaceFolder": "/workspaces/UMLBot",
 	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/UMLBot,type=bind,consistency=cached",
 
-	// nvidia cuda
-	//"runArgs": ["--runtime=nvidia", "--gpus", "all"], 
-
 	// change for the specific project
 	"mounts": [
 		"source=${localWorkspaceFolder}/data,target=/data,type=bind,consistency=cached"
 	  ],
 
-	"forwardPorts":[3000, 7860],
-	
+	"forwardPorts":[8000],
+
 	// Set *default* container specific settings.json values on container create.
-	"settings": { 
+	"settings": {
 		"python.linting.enabled": true,
 		"python.linting.pylintEnabled": true,
 		"python.formatting.autopep8Path": "/usr/local/py-utils/bin/autopep8",
@@ -32,14 +29,10 @@
 		"python.linting.pycodestylePath": "/usr/local/py-utils/bin/pycodestyle",
 		"python.linting.pydocstylePath": "/usr/local/py-utils/bin/pydocstyle",
 		"python.linting.pylintPath": "/usr/local/py-utils/bin/pylint",
-		"kilocode.activeProvider": "openai",   // Or your custom provider
-		"kilocode.apiKey": "${env:KILO_API_KEY}",     // Use the env var above
-		"kilocode.endpoint": "${env:KILO_ENDPOINT}",  // Your backend endpoint
-		"kilocode.model": "",   // Optional, depends on your backend/provider
-		"plantuml.server": "http://plantuml:8080",
-		"plantuml.render": "PlantUMLServer",
-    	"plantuml.urlFormat": "png",
-		
+		"kilocode.activeProvider": "openai",
+		"kilocode.apiKey": "${env:KILO_API_KEY}",
+		"kilocode.endpoint": "${env:KILO_ENDPOINT}",
+		"kilocode.model": ""
 	},
 
 	// Add the IDs of extensions you want installed when the container is created.
@@ -47,20 +40,18 @@
 		"donjayamanne.python-extension-pack",
 		"ms-python.vscode-pylance",
 		"teledemic.branch-warnings",
-        "kilocode.kilo-code",
-		"jebbs.plantuml"
+        "kilocode.kilo-code"
 	],
 
 	"features": {
-  	"ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  	"ghcr.io/devcontainers/features/java:1": { "version": "17", "installGradle": "false", "installMaven": "false" }
 	},
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	// where mlflow starts up
 	"postCreateCommand": [
 		"./Docker/startup.sh"
 	],
-				
+
 
 	// Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
 	"remoteUser": "vscode"

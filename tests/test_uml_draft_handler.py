@@ -5,7 +5,7 @@ Covers prompt construction, LLM invocation, and error handling.
 
 import pytest
 from unittest.mock import Mock, patch
-from UMLBot.uml_draft_handler import UMLDraftHandler
+from UMLBot.diagram_handlers.uml_draft_handler import UMLDraftHandler
 from UMLBot.config.config import UMLBotConfig
 
 
@@ -41,7 +41,7 @@ def test_process_invokes_llm_and_returns_diagram(monkeypatch):
 def test_process_raises_on_missing_llm(monkeypatch):
     handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
-    from UMLBot.uml_draft_handler import UMLRetryManager
+    from UMLBot.diagram_handlers.uml_draft_handler import UMLRetryManager
 
     with pytest.raises(RuntimeError):
         handler.process(
@@ -61,7 +61,7 @@ def test_process_retries_and_surfaces_error(monkeypatch):
         def invoke(self, prompt):
             raise Exception("LLM always fails")
 
-    from UMLBot.uml_draft_handler import UMLRetryManager
+    from UMLBot.diagram_handlers.uml_draft_handler import UMLRetryManager
 
     retry_manager = UMLRetryManager(max_retries=3)
     with pytest.raises(RuntimeError) as excinfo:

@@ -14,7 +14,35 @@
 **/coverage
 **/site
 **/out
+
+# Sensitive / local
 data
 secrets
 .env
 .env.*
+
+# Not needed in deployment image
+llm_utils
+.devcontainer
+.kilocode
+.vscode
+.claude
+Docker
+docs
+explorations
+tests
+hooks
+PlantUML
+
+# Files not needed at runtime
+*.md
+!README.md
+azurify.md
+mkdocs.yml
+Makefile
+workspace.code-workspace
+.flake8
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml

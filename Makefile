@@ -3,54 +3,57 @@ SHELL = /bin/bash
 # help
 .PHONY: help
 help:
-    @echo "Commands:"
-    @echo "venv    : creates a virtual environment."
-    @echo "style   : executes style formatting."
-    @echo "clean   : cleans all unnecessary files."
-    @echo "docs    : builds documentation with mkdocs."
-    @echo "docs-serve: serves the documentation locally."
-    @echo "plantuml-up   : starts local PlantUML server via docker compose."
-    @echo "plantuml-logs : tails PlantUML server logs."
-    @echo "plantuml-down : stops PlantUML server and related services."
+	@echo "Commands:"
+	@echo "venv          : creates a virtual environment."
+	@echo "style         : executes style formatting."
+	@echo "clean         : cleans all unnecessary files."
+	@echo "docs          : builds documentation with mkdocs."
+	@echo "run           : starts the FastAPI server locally."
+	@echo "streamlit     : starts the Streamlit frontend."
+	@echo "docker-build  : builds the single-container image."
+	@echo "docker-up     : starts the container."
+	@echo "docker-down   : stops the container."
+	@echo "docker-logs   : tails container logs."
 # Styling
 .PHONY: style
 style:
-	black UMLBot app tests gradio_app.py setup.py __init__.py
+	black UMLBot app tests streamlit_app.py __init__.py
 	flake8
-	python3 -m isort UMLBot app tests gradio_app.py setup.py __init__.py
-	autopep8 --recursive --aggressive --aggressive UMLBot app tests gradio_app.py setup.py __init__.py
+	python3 -m isort UMLBot app tests streamlit_app.py __init__.py
+	autopep8 --recursive --aggressive --aggressive UMLBot app tests streamlit_app.py __init__.py
 # Environment
 .ONESHELL:
 venv:
 	uv venv .venv --clear
 	source .venv/bin/activate && \
-	uv add setuptools wheel && \
-	uv add -r requirements.txt &&\
-	uv pip install -e ".[dev]"
+	uv sync
 
-.PHONY: npm-install
-npm-install:
-	cd app/frontend && npm install
+# Run the FastAPI server locally
+.PHONY: run
+run:
+	PYTHONPATH=$(PWD) .venv/bin/python app/server.py
 
-.PHONY: npm-build
-npm-build:
-	cd app/frontend && npm run build
+# Streamlit frontend
+.PHONY: streamlit
+streamlit:
+	PYTHONPATH=$(PWD) .venv/bin/streamlit run streamlit_app.py --server.port 8501
 
-.PHONY: npm-dev
-npm-dev:
-	cd app/frontend && npm run dev
+# Full-stack single container
+.PHONY: docker-build
+docker-build:
+	docker compose build
 
-.PHONY: plantuml-up
-plantuml-up:
-	docker compose up -d plantuml
+.PHONY: docker-up
+docker-up:
+	docker compose up -d
 
-.PHONY: plantuml-down
-plantuml-down:
+.PHONY: docker-down
+docker-down:
 	docker compose down
 
-.PHONY: plantuml-logs
-plantuml-logs:
-	docker compose logs -f plantuml
+.PHONY: docker-logs
+docker-logs:
+	docker compose logs -f
 
 .PHONY: test
 test:
@@ -60,7 +63,7 @@ test:
 docs:
 	.venv/bin/mkdocs build
 	.venv/bin/mkdocs serve -a 0.0.0.0:8000
-	
+
 # Cleaning
 .PHONY: clean
 clean: style
