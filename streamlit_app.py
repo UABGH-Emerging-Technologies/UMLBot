@@ -104,8 +104,14 @@ def _fetch_remote_config() -> Dict[str, Any]:
         logger.warning("Failed to fetch remote config: %s", exc)
         return {
             "diagram_types": [
-                "Use Case", "Class", "Activity", "Component",
-                "Deployment", "State Machine", "Timing", "Sequence",
+                "Use Case",
+                "Class",
+                "Activity",
+                "Component",
+                "Deployment",
+                "State Machine",
+                "Timing",
+                "Sequence",
             ],
             "default_diagram_type": "Use Case",
             "fallback_templates": {},

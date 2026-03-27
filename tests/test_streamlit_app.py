@@ -20,7 +20,6 @@ from streamlit_app import (
     api_render,
 )
 
-
 # ---------------------------------------------------------------------------
 # _state_key
 # ---------------------------------------------------------------------------
@@ -206,7 +205,9 @@ class TestEndpointMap:
 
     def test_generate_paths_start_with_v01(self) -> None:
         for mode_key, (gen_path, _, _) in ENDPOINT_MAP.items():
-            assert gen_path.startswith("/v01/"), f"Generate path for {mode_key} should start with /v01/"
+            assert gen_path.startswith(
+                "/v01/"
+            ), f"Generate path for {mode_key} should start with /v01/"
 
     def test_render_paths_start_with_v01(self) -> None:
         for mode_key, (_, render_path, _) in ENDPOINT_MAP.items():
@@ -238,7 +239,10 @@ class TestApiGenerate:
         mock_post.return_value = mock_resp
 
         result = api_generate(
-            "http://localhost:8000", "uml", "test desc", "Class",
+            "http://localhost:8000",
+            "uml",
+            "test desc",
+            "Class",
             openai_compatible_endpoint="https://api.openai.com/v1",
             openai_compatible_model="gpt-4o-mini",
             api_key="sk-test",
@@ -256,7 +260,10 @@ class TestApiGenerate:
         mock_post.return_value = mock_resp
 
         api_generate(
-            "http://localhost:8000", "uml", "test", "Class",
+            "http://localhost:8000",
+            "uml",
+            "test",
+            "Class",
             openai_compatible_endpoint="https://api.example.com/v1",
             openai_compatible_model="gpt-4",
             api_key="sk-test123",

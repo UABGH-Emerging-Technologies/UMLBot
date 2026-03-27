@@ -1,2 +1,1 @@
 """UMLBot core package."""
-

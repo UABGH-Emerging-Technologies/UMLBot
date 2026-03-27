@@ -45,7 +45,7 @@ class UMLRetryManager:
 
 import logging
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any, Optional
 
 
 def escape_curly_braces(val: Optional[str]) -> Optional[str]:
@@ -62,6 +62,7 @@ def escape_curly_braces(val: Optional[str]) -> Optional[str]:
 
 
 from aiweb_common.WorkflowHandler import WorkflowHandler
+
 from UMLBot.config.config import UMLBotConfig
 
 
@@ -76,9 +77,7 @@ class UMLDraftHandler(WorkflowHandler):
     def __init__(self, config: Optional[UMLBotConfig] = None):
         """Initialize the handler with optional configuration overrides."""
         super().__init__()
-        self.prompty_path = (
-            Path(__file__).resolve().parents[2] / "assets" / "uml_diagram.prompty"
-        )
+        self.prompty_path = Path(__file__).resolve().parents[2] / "assets" / "uml_diagram.prompty"
         self.config = config or UMLBotConfig()
 
     def _validate_prompt_template(self, template: str) -> None:
