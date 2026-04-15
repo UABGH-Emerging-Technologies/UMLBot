@@ -7,6 +7,8 @@ dependencies = [
     # Runtime ---------------------------------------------------------------
     "aiweb-common @ git+https://github.com/UABPeriopAI/llm_utils.git@develop",
     "fastapi>=0.118.3",
+    "langchain-openai>=1.1.0",
+    "openai>=2.20.0",
     "Pillow",
     "python-multipart>=0.0.20",
     "rich>=14.2.0",

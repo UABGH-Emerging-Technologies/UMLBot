@@ -48,9 +48,7 @@ UABMC_AZURE_KEY: str = manage_sensitive("azure_proxy_key")
 MODEL_TO_USE: str = "gpt-5.2"
 
 # Backend URL from environment with localhost fallback for local dev
-API_BASE_URL: str = os.environ.get(
-    "UMLBOT_ENDPOINT", "http://localhost:8000"
-)
+API_BASE_URL: str = os.environ.get("UMLBOT_ENDPOINT", "http://localhost:8000")
 
 DEFAULT_TIMEOUT: int = 120
 
@@ -94,9 +92,7 @@ def _fetch_remote_config() -> Dict[str, Any]:
     if _remote_config is not None:
         return _remote_config
     try:
-        resp = requests.get(
-            f"{API_BASE_URL.rstrip('/')}/v01/config", timeout=10
-        )
+        resp = requests.get(f"{API_BASE_URL.rstrip('/')}/v01/config", timeout=10)
         resp.raise_for_status()
         _remote_config = resp.json()
         return _remote_config
@@ -259,9 +255,7 @@ def api_render(
     render_path: str = ENDPOINT_MAP[mode][1]
     payload: Dict[str, Any] = {"plantuml_code": plantuml_code}
     try:
-        resp = requests.post(
-            _build_url(render_path), json=payload, timeout=60
-        )
+        resp = requests.post(_build_url(render_path), json=payload, timeout=60)
         resp.raise_for_status()
         data = resp.json()
         return {
@@ -393,9 +387,7 @@ def _init_session_state(config: Dict[str, Any]) -> None:
     if "theme" not in st.session_state:
         st.session_state["theme"] = ""
     if "uml_subtype" not in st.session_state:
-        st.session_state["uml_subtype"] = config.get(
-            "default_diagram_type", "Use Case"
-        )
+        st.session_state["uml_subtype"] = config.get("default_diagram_type", "Use Case")
 
 
 # ---------------------------------------------------------------------------
@@ -458,9 +450,7 @@ def _handle_chat_input(
     else:
         st.session_state[error_key] = result.get("message", "Generation failed.")
         st.session_state[status_key] = ""
-        history.append(
-            {"role": "assistant", "content": f"Error: {result.get('message', '')}"}
-        )
+        history.append({"role": "assistant", "content": f"Error: {result.get('message', '')}"})
 
     st.session_state[history_key] = history
 
@@ -498,18 +488,12 @@ def _render_mode_tab(mode: str, config: Dict[str, Any]) -> None:
     error_key: str = _state_key(mode, "error_message")
 
     # UML sub-type dropdown (only for uml mode)
-    diagram_types: List[str] = config.get(
-        "diagram_types", ["Use Case", "Class", "Sequence"]
-    )
+    diagram_types: List[str] = config.get("diagram_types", ["Use Case", "Class", "Sequence"])
     if mode == "uml":
         current_subtype: str = st.session_state.get(
             "uml_subtype", config.get("default_diagram_type", "Use Case")
         )
-        idx: int = (
-            diagram_types.index(current_subtype)
-            if current_subtype in diagram_types
-            else 0
-        )
+        idx: int = diagram_types.index(current_subtype) if current_subtype in diagram_types else 0
         st.session_state["uml_subtype"] = st.selectbox(
             "UML Diagram Type",
             options=diagram_types,
@@ -627,8 +611,7 @@ def show_umlbot_page() -> None:
     apply_uab_font()
 
     st.title(f"{page_icon} {page_title}")
-    st.markdown(
-        """
+    st.markdown("""
         **Interactive diagram generation powered by LLM + PlantUML**
 
         Describe what you want in plain language and the AI will generate
@@ -636,8 +619,7 @@ def show_umlbot_page() -> None:
         the chat, or edit the code directly and re-render.
 
         ---
-        """
-    )
+        """)
 
     config: Dict[str, Any] = _fetch_remote_config()
     _init_session_state(config)
