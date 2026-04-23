@@ -1,4 +1,4 @@
-name: Build and push umlbot-api
+name: Build, push & deploy umlbot-api
 
 on:
   push:
@@ -16,8 +16,8 @@ jobs:
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ secrets.UMLBOTAPI_REGISTRY_USERNAME }}
-          password: ${{ secrets.UMLBOTAPI_REGISTRY_PASSWORD }}
+          username: ${{ secrets.UMLAPI_REGISTRY_USERNAME }}
+          password: ${{ secrets.UMLAPI_REGISTRY_PASSWORD }}
 
       - uses: docker/build-push-action@v7
         with:
@@ -26,3 +26,26 @@ jobs:
           tags: |
             ghcr.io/uabgh-emerging-technologies/umlbot-api:latest
             ghcr.io/uabgh-emerging-technologies/umlbot-api:${{ github.sha }}
+
+  deploy-azure:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.UMLAPI_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.UMLAPI_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.UMLAPI_AZURE_SUBSCRIPTION_ID }}
+
+      # NOTE: using az containerapp update instead of azure/container-apps-deploy-action@v2
+      # because the managed environment moved to anes-ai-speech after a support recovery.
+      # The deploy action fails to resolve the environment under the app resource group.
+      # Revert to the action if the environment is moved back.
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name uml-api \
+            --resource-group anes-ai \
+            --image ghcr.io/uabgh-emerging-technologies/umlbot-api:${{ github.sha }}
