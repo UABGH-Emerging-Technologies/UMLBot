@@ -1,8 +1,8 @@
-name: Build and Push umlbot-api
+name: Build and push umlbot-api
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -10,21 +10,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.UMLBOTAPI_REGISTRY_USERNAME }}
+          password: ${{ secrets.UMLBOTAPI_REGISTRY_PASSWORD }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           push: true
