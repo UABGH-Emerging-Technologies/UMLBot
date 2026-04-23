@@ -1,5 +1,7 @@
 """FastAPI entry point for UMLBot."""
 
+import os
+
 import uvicorn
 from fastapi import FastAPI
 
@@ -16,6 +18,7 @@ app = FastAPI(
     version=API_VERSION,
     description=API_DESCRIPTION,
     contact=API_CONTACT,
+    root_path=os.environ.get("ROOT_PATH", ""),
 )
 
 app.include_router(v01_router, prefix="/v01")
