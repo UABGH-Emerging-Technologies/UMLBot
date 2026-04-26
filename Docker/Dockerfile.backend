@@ -18,6 +18,7 @@ COPY requirements.txt pyproject.toml setup.py /app/
 COPY llm_utils /app/llm_utils
 COPY UMLBot /app/UMLBot
 COPY gradio_app.py /app/gradio_app.py
+COPY assets /app/assets
 COPY app /app/app
 
 RUN pip install --no-cache-dir --upgrade pip \

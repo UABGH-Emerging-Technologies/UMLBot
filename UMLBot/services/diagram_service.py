@@ -93,6 +93,8 @@ def render_diagram_from_code(plantuml_code: str) -> Tuple[Image.Image, str, str]
     Re-renders an already generated PlantUML snippet.
     Returns a placeholder image if the render fails so the UI can continue gracefully.
     """
+    if not plantuml_code or not plantuml_code.strip():
+        return _create_placeholder_image("No PlantUML code provided"), "No code to render.", ""
     image_url = build_plantuml_image_url(plantuml_code)
     pil_image, status_msg = _fetch_plantuml_image(
         image_url=image_url,
@@ -115,6 +117,8 @@ def diagram_image_to_base64(image: Image.Image | None) -> Optional[str]:
 
 def build_plantuml_image_url(plantuml_code: str) -> str:
     """Build a PlantUML render URL for the given diagram code."""
+    if not plantuml_code or not plantuml_code.strip():
+        return ""
     encoded = _plantuml_encode(plantuml_code)
     return _build_plantuml_url(UMLBotConfig.PLANTUML_SERVER_URL_TEMPLATE, encoded)
 
