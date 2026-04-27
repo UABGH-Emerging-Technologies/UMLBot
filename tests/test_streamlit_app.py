@@ -222,7 +222,7 @@ class TestEndpointMap:
 
 
 class TestApiGenerate:
-    """Tests for the api_generate function."""
+    """Tests for the api_generate function (centralized-credentials signature)."""
 
     @patch("streamlit_app.requests.post")
     def test_success(self, mock_post: MagicMock) -> None:
@@ -238,49 +238,30 @@ class TestApiGenerate:
         mock_resp.raise_for_status = MagicMock()
         mock_post.return_value = mock_resp
 
-        result = api_generate(
-            "http://localhost:8000",
-            "uml",
-            "test desc",
-            "Class",
-            openai_compatible_endpoint="https://api.openai.com/v1",
-            openai_compatible_model="gpt-4o-mini",
-            api_key="sk-test",
-        )
+        result = api_generate("uml", "test desc", "Class")
 
         assert result["status"] == "ok"
         assert result["plantuml_code"] == "@startuml\n@enduml"
         assert result["image_base64"] == "abc123"
 
     @patch("streamlit_app.requests.post")
-    def test_includes_credentials_in_payload(self, mock_post: MagicMock) -> None:
+    def test_injects_centralized_credentials(self, mock_post: MagicMock) -> None:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"status": "ok"}
         mock_resp.raise_for_status = MagicMock()
         mock_post.return_value = mock_resp
 
-        api_generate(
-            "http://localhost:8000",
-            "uml",
-            "test",
-            "Class",
-            openai_compatible_endpoint="https://api.example.com/v1",
-            openai_compatible_model="gpt-4",
-            api_key="sk-test123",
-        )
+        api_generate("uml", "test", "Class")
 
         called_payload = mock_post.call_args[1]["json"]
-        assert called_payload["openai_compatible_endpoint"] == "https://api.example.com/v1"
-        assert called_payload["openai_compatible_model"] == "gpt-4"
-
-        called_headers = mock_post.call_args[1]["headers"]
-        assert called_headers["Authorization"] == "Bearer sk-test123"
+        assert "openai_compatible_endpoint" in called_payload
+        assert "openai_compatible_model" in called_payload
 
     @patch("streamlit_app.requests.post")
     def test_timeout(self, mock_post: MagicMock) -> None:
         mock_post.side_effect = requests.exceptions.Timeout()
 
-        result = api_generate("http://localhost:8000", "uml", "test", "Class")
+        result = api_generate("uml", "test", "Class")
 
         assert result["status"] == "error"
         assert "timed out" in result["message"]
@@ -289,7 +270,7 @@ class TestApiGenerate:
     def test_connection_error(self, mock_post: MagicMock) -> None:
         mock_post.side_effect = requests.exceptions.ConnectionError()
 
-        result = api_generate("http://localhost:8000", "mindmap", "test", "Mindmap")
+        result = api_generate("mindmap", "test", "Mindmap")
 
         assert result["status"] == "error"
         assert "Cannot connect" in result["message"]
@@ -302,7 +283,7 @@ class TestApiGenerate:
         http_error = requests.exceptions.HTTPError(response=mock_resp)
         mock_post.side_effect = http_error
 
-        result = api_generate("http://localhost:8000", "uml", "test", "Class")
+        result = api_generate("uml", "test", "Class")
 
         assert result["status"] == "error"
 
@@ -313,7 +294,7 @@ class TestApiGenerate:
         mock_resp.raise_for_status = MagicMock()
         mock_post.return_value = mock_resp
 
-        api_generate("http://localhost:8000", "gantt", "test", "gantt")
+        api_generate("gantt", "test", "gantt")
 
         called_url = mock_post.call_args[0][0]
         assert "/v01/gantt/generate" in called_url
@@ -325,7 +306,7 @@ class TestApiGenerate:
         mock_resp.raise_for_status = MagicMock()
         mock_post.return_value = mock_resp
 
-        api_generate("http://localhost:8000", "uml", "test", "Class", theme="cerulean")
+        api_generate("uml", "test", "Class", theme="cerulean")
 
         called_payload = mock_post.call_args[1]["json"]
         assert called_payload["theme"] == "cerulean"
@@ -337,7 +318,7 @@ class TestApiGenerate:
 
 
 class TestApiRender:
-    """Tests for the api_render function."""
+    """Tests for the api_render function (centralized-credentials signature)."""
 
     @patch("streamlit_app.requests.post")
     def test_success(self, mock_post: MagicMock) -> None:
@@ -352,7 +333,7 @@ class TestApiRender:
         mock_resp.raise_for_status = MagicMock()
         mock_post.return_value = mock_resp
 
-        result = api_render("http://localhost:8000", "uml", "@startuml\n@enduml")
+        result = api_render("uml", "@startuml\n@enduml")
 
         assert result["status"] == "ok"
         assert result["image_base64"] == "rendered_img"
@@ -362,7 +343,7 @@ class TestApiRender:
     def test_timeout(self, mock_post: MagicMock) -> None:
         mock_post.side_effect = requests.exceptions.Timeout()
 
-        result = api_render("http://localhost:8000", "mindmap", "@startmindmap\n@endmindmap")
+        result = api_render("mindmap", "@startmindmap\n@endmindmap")
 
         assert result["status"] == "error"
         assert "timed out" in result["message"]
@@ -371,7 +352,7 @@ class TestApiRender:
     def test_connection_error(self, mock_post: MagicMock) -> None:
         mock_post.side_effect = requests.exceptions.ConnectionError()
 
-        result = api_render("http://localhost:8000", "uml", "@startuml\n@enduml")
+        result = api_render("uml", "@startuml\n@enduml")
 
         assert result["status"] == "error"
         assert "Cannot connect" in result["message"]
@@ -383,7 +364,7 @@ class TestApiRender:
         mock_resp.raise_for_status = MagicMock()
         mock_post.return_value = mock_resp
 
-        api_render("http://localhost:8000", "erd", "@startuml\n@enduml")
+        api_render("erd", "@startuml\n@enduml")
 
         called_url = mock_post.call_args[0][0]
         assert "/v01/erd/render" in called_url

@@ -3,7 +3,9 @@
 import logging
 import logging.config
 import os
+import re
 from pathlib import Path
+from re import Pattern
 
 
 def _load_env_file(path: Path) -> None:
@@ -32,6 +34,14 @@ def _load_env_file(path: Path) -> None:
 
 # Load repo-root .env for local/dev runs (do not override explicit env vars).
 _load_env_file(Path(__file__).resolve().parents[2] / ".env")
+
+
+_GPT5_PATTERN: Pattern[str] = re.compile(r"^gpt-?5", re.IGNORECASE)
+
+
+def is_responses_api_model(model_name: str) -> bool:
+    """Return True if the model should use the OpenAI Responses API."""
+    return bool(_GPT5_PATTERN.match(model_name))
 
 
 class UMLBotConfig:
@@ -87,6 +97,11 @@ class UMLBotConfig:
         "@enduml"
     )
     DIAGRAM_SUCCESS_MSG = "Diagram generated successfully using LLM."
+
+    # Responses API reasoning effort for GPT-5 series models.
+    # Valid values: "none" (gpt-5.2+), "minimal" (< gpt-5.2), "low", "medium",
+    # "high", or None (model default).
+    REASONING_EFFORT: str | None = os.getenv("REASONING_EFFORT", "low")
 
     # PlantUML JAR rendering
     PLANTUML_JAR_PATH = os.getenv(

@@ -12,7 +12,7 @@ from typing import Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 
-from UMLBot.config.config import UMLBotConfig
+from UMLBot.config.config import UMLBotConfig, is_responses_api_model
 from UMLBot.diagram_handlers import (
     C4DraftHandler,
     ERDraftHandler,
@@ -235,11 +235,14 @@ class DiagramService:
         openai_compatible_model: str,
     ) -> DiagramGenerationResult:
         """Shared diagram generation pipeline with per-request LLM credentials."""
+        _use_responses: bool = is_responses_api_model(openai_compatible_model)
         handler._init_openai(
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
             name="UMLBot",
+            use_responses_api=_use_responses,
+            reasoning_effort=UMLBotConfig.REASONING_EFFORT if _use_responses else None,
         )
 
         try:

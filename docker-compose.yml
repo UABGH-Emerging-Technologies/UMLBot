@@ -4,6 +4,7 @@ services:
     environment:
       PYTHONUNBUFFERED: 1
       UMLBOT_PLANTUML_JAR_PATH: /opt/plantuml/plantuml.jar
+      REASONING_EFFORT: ${REASONING_EFFORT:-low}
     ports:
       - "8000:8000"
     healthcheck:
@@ -12,4 +13,17 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    restart: unless-stopped
+
+  streamlit:
+    build: .
+    command: ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    environment:
+      PYTHONUNBUFFERED: 1
+      UMLBOT_ENDPOINT: http://umlbot:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      umlbot:
+        condition: service_healthy
     restart: unless-stopped
