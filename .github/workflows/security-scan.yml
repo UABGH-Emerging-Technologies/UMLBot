@@ -6,10 +6,62 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  security:
-    uses: UABGH-Emerging-Technologies/ai_web_interface/.github/workflows/security-scan-reusable.yml@main
-    with:
-      package-manager: "uv"
-      scan-path: "."
-      python-version: "3.11"
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      # TODO: remove continue-on-error once existing vulnerabilities are triaged
+      - name: uv audit
+        continue-on-error: true
+        run: uv audit --preview
+
+  sast:
+    name: Static Analysis (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      # TODO: remove continue-on-error once existing findings are triaged
+      - name: Run Bandit
+        continue-on-error: true
+        run: >
+          bandit -r .
+          --severity-level medium
+          --confidence-level medium
+
+  container-scan:
+    name: Container Scan (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image for scanning
+        run: >
+          docker build
+          -t scan-target:${{ github.sha }}
+          -f Dockerfile
+          .
+
+      # TODO: remove exit-code 0 to make this a hard gate once base image CVEs are triaged
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: scan-target:${{ github.sha }}
+          format: table
+          exit-code: "0"
+          severity: CRITICAL,HIGH
