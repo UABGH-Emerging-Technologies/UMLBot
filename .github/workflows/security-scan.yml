@@ -19,7 +19,7 @@ jobs:
 
       # TODO: remove continue-on-error once existing vulnerabilities are triaged
       - name: uv audit
-        run: uv audit --preview
+        run: uv audit --preview --severity high
 
   sast:
     name: Static Analysis (Bandit)
