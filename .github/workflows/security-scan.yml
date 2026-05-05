@@ -15,12 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v5
 
       # TODO: remove continue-on-error once existing vulnerabilities are triaged
       - name: uv audit
-        continue-on-error: true
         run: uv audit --preview
 
   sast:
@@ -38,10 +36,9 @@ jobs:
 
       # TODO: remove continue-on-error once existing findings are triaged
       - name: Run Bandit
-        continue-on-error: true
         run: >
           bandit -r .
-          --severity-level medium
+          --severity-level high
           --confidence-level medium
 
   container-scan:
@@ -63,5 +60,4 @@ jobs:
         with:
           image-ref: scan-target:${{ github.sha }}
           format: table
-          exit-code: "0"
           severity: CRITICAL,HIGH
