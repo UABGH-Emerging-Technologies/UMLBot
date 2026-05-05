@@ -1,0 +1,15 @@
+name: Security Scan
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  security:
+    uses: UABGH-Emerging-Technologies/ai_web_interface/.github/workflows/security-scan-reusable.yml@main
+    with:
+      package-manager: "uv"
+      scan-path: "."
+      python-version: "3.11"
