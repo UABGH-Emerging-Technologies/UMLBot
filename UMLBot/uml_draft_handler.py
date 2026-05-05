@@ -45,7 +45,9 @@ class UMLRetryManager:
 
 import logging
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any, Optional
+
+from UMLBot.utils.plantuml_extractor import extract_last_plantuml_block
 
 
 def escape_curly_braces(val: Optional[str]) -> Optional[str]:
@@ -195,6 +197,37 @@ class UMLDraftHandler(WorkflowHandler):
         }
         return prompt_template.format_prompt(**variables)
 
+    @staticmethod
+    def _extract_prompt_input(prompt: Any) -> Any:
+        """Extract a value suitable for llm_interface.invoke() from a prompt object."""
+        if hasattr(prompt, "to_messages"):
+            messages = prompt.to_messages()
+            if messages and hasattr(messages[0], "content"):
+                return messages[0].content
+            return messages
+        if hasattr(prompt, "messages"):
+            messages = prompt.messages
+            if messages and hasattr(messages[0], "content"):
+                return messages[0].content
+            return messages
+        if isinstance(prompt, str):
+            return prompt
+        raise TypeError("Prompt is not a recognized type for LLM input.")
+
+    @staticmethod
+    def _build_correction_prompt(raw_output: str, error: str) -> str:
+        """Build a prompt that feeds back the failed output and error to the LLM."""
+        return (
+            "Your previous response did not contain valid PlantUML. "
+            "Here is what you returned:\n\n---\n"
+            + raw_output
+            + "\n---\n\n"
+            "The error was: " + error + "\n\n"
+            "Please try again. Return ONLY a valid PlantUML code block "
+            "starting with @startuml and ending with @enduml. "
+            "Do not include any explanatory text."
+        )
+
     def process(
         self,
         diagram_type: str,
@@ -204,54 +237,55 @@ class UMLDraftHandler(WorkflowHandler):
         retry_manager: Optional["UMLRetryManager"] = None,
     ) -> str:
         """
-        Generates a UML diagram using the LLM and prompty template, with error handling and retry logic.
+        Generates a UML diagram using the LLM and prompty template, with
+        validation and error-feedback retry logic.
 
-        Args:
-            diagram_type (str): Type of UML diagram to generate.
-            description (str): Description of the system/process to diagram.
-            theme (Optional[str]): PlantUML theme/style.
-            llm_interface: Optional LLM interface for invocation (must have .invoke()).
-            retry_manager (Optional[UMLRetryManager]): Helper for tracking retries and error context.
+        On each attempt the LLM response is validated via
+        ``extract_last_plantuml_block``.  If validation fails, the next retry
+        includes the failed output and the error message so the LLM can
+        self-correct.  Infrastructure errors (network, API) retry with the
+        original prompt.
 
         Returns:
-            str: PlantUML diagram code.
+            str: Validated PlantUML diagram code.
 
         Raises:
+            ValueError: If *llm_interface* is ``None``.
             RuntimeError: If all retries fail, with error context.
         """
+        if llm_interface is None:
+            raise ValueError("LLM interface must be provided for diagram generation.")
         if retry_manager is None:
             retry_manager = UMLRetryManager(max_retries=3)
+
+        prompt = self.construct_prompt(diagram_type, description, theme)
+        prompt_input = self._extract_prompt_input(prompt)
+        correction_prompt = None
+
         while retry_manager.should_retry():
+            raw_text = ""
             try:
-                prompt = self.construct_prompt(diagram_type, description, theme)
-                if llm_interface is None:
-                    raise ValueError("LLM interface must be provided for diagram generation.")
-                # Extract messages if present (Langchain ChatPromptValue)
-                if hasattr(prompt, "to_messages"):
-                    messages = prompt.to_messages()
-                    if messages and hasattr(messages[0], "content"):
-                        prompt_input = messages[0].content
-                    else:
-                        prompt_input = messages
-                elif hasattr(prompt, "messages"):
-                    messages = prompt.messages
-                    if messages and hasattr(messages[0], "content"):
-                        prompt_input = messages[0].content
-                    else:
-                        prompt_input = messages
-                elif isinstance(prompt, str):
-                    prompt_input = prompt
-                else:
-                    raise TypeError("Prompt is not a recognized type for LLM input.")
-                response = llm_interface.invoke(prompt_input)
-                diagram_code = self.check_content_type(response)
-                return diagram_code
+                active_prompt = correction_prompt if correction_prompt else prompt_input
+                response = llm_interface.invoke(active_prompt)
+                raw_text = self.check_content_type(response)
+                extracted = extract_last_plantuml_block(raw_text)
+                return extracted
+
+            except ValueError as ve:
+                retry_manager.record_error(ve)
+                logging.warning(
+                    "PlantUML validation failed (attempt %s): %s",
+                    retry_manager.attempt, ve,
+                )
+                correction_prompt = self._build_correction_prompt(raw_text, str(ve))
+
             except Exception as exc:
                 retry_manager.record_error(exc)
                 logging.exception(
                     "UML diagram generation failed (attempt %s)", retry_manager.attempt
                 )
-        # After max retries, raise with error context
+                correction_prompt = None
+
         error_msg = (
             f"UML diagram generation failed after {retry_manager.max_retries} attempts.\n"
             f"Error context:\n{retry_manager.error_context()}"

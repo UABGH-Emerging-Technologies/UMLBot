@@ -46,12 +46,12 @@ def test_chat_history_scrollable_and_persistent(monkeypatch):
 
 
 def test_chat_uml_revision_with_error_handler(monkeypatch):
-    # Simulate a chat workflow where the first UML generation fails, then succeeds after correction
+    """process() handles internal retries: first LLM call fails, second succeeds,
+    so the GenericErrorHandler sees success on its first invocation."""
     handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
     monkeypatch.setattr(handler, "check_content_type", lambda x: x)
 
-    # Simulate LLM interface: first call returns error, second call returns valid UML
     llm_calls = [Exception("LLM error"), "@startuml\nclass Foo\n@enduml"]
 
     class MockLLM:
@@ -90,11 +90,12 @@ def test_chat_uml_revision_with_error_handler(monkeypatch):
         max_retries=2,
     )
     result = error_handler.run()
-    # Defensive: result may be Exception or str
     if isinstance(result, Exception):
         assert False, f"Expected UML string, got Exception: {result}"
     assert "@startuml" in str(result)
-    assert corrections == [(1, "LLM error")]
+    # process() now handles retries internally, so GenericErrorHandler
+    # succeeds on the first call and no corrections are needed.
+    assert corrections == []
 
 
 def test_integration_respects_retry_limit(monkeypatch):

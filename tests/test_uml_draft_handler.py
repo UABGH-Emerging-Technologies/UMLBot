@@ -41,15 +41,13 @@ def test_process_invokes_llm_and_returns_diagram(monkeypatch):
 def test_process_raises_on_missing_llm(monkeypatch):
     handler = UMLDraftHandler(config=UMLBotConfig())
     monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
-    from UMLBot.uml_draft_handler import UMLRetryManager
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ValueError, match="LLM interface must be provided"):
         handler.process(
             "class",
             "Foo system",
             "bluegray",
             llm_interface=None,
-            retry_manager=UMLRetryManager(max_retries=1),
         )
 
 
@@ -90,6 +88,71 @@ def test_validate_prompt_template_malformed(monkeypatch):
     bad_template = "Generate a {123bad} diagram for: {description}"
     with pytest.raises(ValueError):
         handler._validate_prompt_template(bad_template)
+
+
+def test_process_validates_plantuml_and_retries_with_feedback(monkeypatch):
+    """When LLM returns text missing @startuml, process() retries with a correction prompt."""
+    handler = UMLDraftHandler(config=UMLBotConfig())
+    monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
+
+    responses = [
+        "Here is a class diagram:\nclass Foo",
+        "@startuml\nclass Foo\n@enduml",
+    ]
+    invocations = []
+
+    class MockLLM:
+        def invoke(self, prompt):
+            invocations.append(prompt)
+            return responses.pop(0)
+
+    monkeypatch.setattr(handler, "check_content_type", lambda x: x)
+    result = handler.process("class", "Foo system", llm_interface=MockLLM())
+    assert "@startuml" in result
+    assert len(invocations) == 2
+    assert "did not contain valid PlantUML" in invocations[1]
+
+
+def test_process_infra_error_retries_with_original_prompt(monkeypatch):
+    """Infrastructure errors (network, etc.) retry with the original prompt, not a correction."""
+    handler = UMLDraftHandler(config=UMLBotConfig())
+    monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
+
+    call_count = [0]
+    invocations = []
+
+    class MockLLM:
+        def invoke(self, prompt):
+            invocations.append(prompt)
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise ConnectionError("Network timeout")
+            return "@startuml\nclass Foo\n@enduml"
+
+    monkeypatch.setattr(handler, "check_content_type", lambda x: x)
+    result = handler.process("class", "Foo system", llm_interface=MockLLM())
+    assert "@startuml" in result
+    assert invocations[0] == invocations[1]
+
+
+def test_process_returns_extracted_plantuml(monkeypatch):
+    """process() strips markdown wrappers and explanatory text, returning only the PlantUML block."""
+    handler = UMLDraftHandler(config=UMLBotConfig())
+    monkeypatch.setattr(handler, "load_prompty", lambda: DummyPrompt("template"))
+
+    class MockLLM:
+        def invoke(self, prompt):
+            return (
+                "Sure! Here is your diagram:\n"
+                "```plantuml\n@startuml\nclass Foo\n@enduml\n```\n"
+                "Hope this helps!"
+            )
+
+    monkeypatch.setattr(handler, "check_content_type", lambda x: x)
+    result = handler.process("class", "Foo system", llm_interface=MockLLM())
+    assert result.startswith("@startuml")
+    assert result.endswith("@enduml")
+    assert "Hope this helps" not in result
 
 
 def test_construct_prompt_escapes_curly_braces(monkeypatch):

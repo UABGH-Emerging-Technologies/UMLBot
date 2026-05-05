@@ -26,6 +26,7 @@ from UMLBot.services import (
 )
 from UMLBot.uml_draft_handler import UMLDraftHandler
 from llm_utils.aiweb_common.generate.ChatResponse import ChatResponseHandler
+from llm_utils.aiweb_common.WorkflowHandler import extract_response_text
 
 
 with gr.Blocks(title="UML Diagram Generator") as demo:
@@ -166,16 +167,16 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         from UMLBot.uml_draft_handler import UMLRetryManager
 
         retry_manager = UMLRetryManager(max_retries=3)
-        raw_response = None
         error_feedback = ""
-        pil_image = None  # Always defined before loop
+        pil_image = None
         for attempt in range(1, retry_manager.max_retries + 1):
+            raw_response = None
             try:
                 chat_response_handler = ChatResponseHandler(
                     handler.llm_interface, prompt=system_msg
                 )
-                chat_response = chat_response_handler.generate_response(messages)
-                raw_response = chat_response.response.content
+                content, _metadata = chat_response_handler.generate_response(messages)
+                raw_response = extract_response_text(content)
                 extracted_plantuml = extract_last_plantuml_block(raw_response)
                 plantuml_code_text = extracted_plantuml
                 pil_image, status_msg = on_rerender(plantuml_code_text)
@@ -188,6 +189,20 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
                 pil_image = None
                 status_msg = error_msg
                 error_feedback = f"⚠️ {error_msg}"
+
+                if raw_response:
+                    messages.append({"role": "ai", "content": raw_response})
+                    messages.append({
+                        "role": "human",
+                        "content": (
+                            "Your response did not contain valid PlantUML. "
+                            "The error was: " + str(e) + "\n\n"
+                            "Please try again. Return ONLY a valid PlantUML "
+                            "code block starting with @startuml and ending "
+                            "with @enduml. Do not include any explanatory text."
+                        ),
+                    })
+
                 if not retry_manager.should_retry():
                     error_feedback += (
                         f"\nMax retries reached. Error context:\n{retry_manager.error_context()}"
