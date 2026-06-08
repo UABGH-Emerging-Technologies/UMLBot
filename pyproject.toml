@@ -17,6 +17,7 @@ dependencies = [
     # Pinned transitive deps to fix known vulnerabilities
     "aiohttp>=3.14.0",
     "pyjwt>=2.13.0",
+    "starlette>=1.0.1",
     # Dev / CI (--no-dev unreliable on Azure, so these stay here) -----------
     "autopep8",
     "black",
@@ -69,7 +70,7 @@ include_trailing_comma = true
 virtual_env = "venv"
 
 [tool.uv.sources]
-aiweb-common = { git = "https://github.com/UABPeriopAI/llm_utils.git", branch = "security/dependency-upgrades" }
+aiweb-common = { git = "https://github.com/UABPeriopAI/llm_utils.git", branch = "develop" }
 
 [build-system]
 requires = ["setuptools>=61"]
