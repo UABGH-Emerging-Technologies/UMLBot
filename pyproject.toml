@@ -14,6 +14,9 @@ dependencies = [
     "rich>=14.2.0",
     "streamlit>=1.50.0",
     "uvicorn>=0.37.0",
+    # Pinned transitive deps to fix known vulnerabilities
+    "aiohttp>=3.14.0",
+    "pyjwt>=2.13.0",
     # Dev / CI (--no-dev unreliable on Azure, so these stay here) -----------
     "autopep8",
     "black",
