@@ -7,10 +7,10 @@ dependencies = [
     # Runtime ---------------------------------------------------------------
     "aiweb-common @ git+https://github.com/UABPeriopAI/llm_utils.git@develop",
     "fastapi>=0.118.3",
-    "langchain-openai>=1.1.0",
+    "langchain-openai>=1.1.14",
     "openai>=2.20.0",
-    "Pillow",
-    "python-multipart>=0.0.20",
+    "Pillow>=12.2.0",
+    "python-multipart>=0.0.26",
     "rich>=14.2.0",
     "streamlit>=1.50.0",
     "uvicorn>=0.37.0",
@@ -66,7 +66,7 @@ include_trailing_comma = true
 virtual_env = "venv"
 
 [tool.uv.sources]
-aiweb-common = { git = "https://github.com/UABPeriopAI/llm_utils.git", branch = "develop" }
+aiweb-common = { git = "https://github.com/UABPeriopAI/llm_utils.git", branch = "security/dependency-upgrades" }
 
 [build-system]
 requires = ["setuptools>=61"]

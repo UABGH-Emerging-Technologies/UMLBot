@@ -3,6 +3,7 @@
 import os
 
 os.environ.setdefault("azure_proxy_key", "test-key")
+os.environ.setdefault("azure_proxy_endpoint", "https://test-endpoint/v1")
 
 from unittest.mock import MagicMock, patch
 
