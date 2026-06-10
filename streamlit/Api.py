@@ -2,11 +2,29 @@ import os
 from typing import Any
 
 import requests
+from aiweb_common.WorkflowHandler import manage_sensitive
 
-BASE_URL = os.environ.get("UMLBOT_ENDPOINT", "http://localhost:8000")
-API_AUTH_TOKEN = os.environ.get("OPENAI_COMPATIBLE_KEY", "")
-OPENAI_COMPATIBLE_ENDPOINT = os.environ.get("OPENAI_COMPATIBLE_ENDPOINT", "")
-OPENAI_COMPATIBLE_MODEL = os.environ.get("OPENAI_COMPATIBLE_MODEL", "o3")
+
+def _resolve_credential(secret_name: str, legacy_env_var: str) -> str:
+    """Resolve an LLM credential from the shared secret locations.
+
+    manage_sensitive checks, in order: /run/secrets (compose secrets),
+    /workspaces/*/secrets (devcontainer), /mnt/p/Secrets (team mount), then an
+    env var named after the secret (.env via `make run`). The legacy
+    OPENAI_COMPATIBLE_* env vars remain a last-resort fallback.
+    """
+    try:
+        return manage_sensitive(secret_name)
+    except KeyError:
+        return os.environ.get(legacy_env_var, "")
+
+
+BASE_URL: str = os.environ.get("UMLBOT_ENDPOINT", "http://localhost:8000")
+API_AUTH_TOKEN: str = _resolve_credential("azure_proxy_key", "OPENAI_COMPATIBLE_KEY")
+OPENAI_COMPATIBLE_ENDPOINT: str = _resolve_credential(
+    "azure_proxy_endpoint", "OPENAI_COMPATIBLE_ENDPOINT"
+)
+OPENAI_COMPATIBLE_MODEL: str = os.environ.get("OPENAI_COMPATIBLE_MODEL", "o3")
 DEFAULT_TIMEOUT = 1800
 MAX_HISTORY_MESSAGES = 10
 
@@ -104,9 +122,7 @@ def _inject_llm_fields(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _summarize_chat_history(history: list[dict[str, str]]) -> str:
     recent = history[-MAX_HISTORY_MESSAGES:]
-    return "\n".join(
-        f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in recent
-    )
+    return "\n".join(f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in recent)
 
 
 def build_prompt_description(
