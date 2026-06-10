@@ -1,5 +1,12 @@
 # Makefile
 SHELL = /bin/bash
+
+# Load .env file if it exists
+ifneq (,$(wildcard ./.env))
+    include .env
+    export
+endif
+
 # help
 .PHONY: help
 help:
@@ -8,8 +15,9 @@ help:
 	@echo "style         : executes style formatting."
 	@echo "clean         : cleans all unnecessary files."
 	@echo "docs          : builds documentation with mkdocs."
-	@echo "run           : starts the FastAPI server locally."
-	@echo "streamlit     : starts the Streamlit frontend."
+	@echo "run           : starts backend and frontend together."
+	@echo "backend       : starts only the FastAPI server."
+	@echo "frontend      : starts only the Streamlit frontend."
 	@echo "docker-build  : builds the single-container image."
 	@echo "docker-up     : starts the container."
 	@echo "docker-down   : stops the container."
@@ -28,15 +36,21 @@ venv:
 	source .venv/bin/activate && \
 	uv sync
 
-# Run the FastAPI server locally
-.PHONY: run
-run:
-	PYTHONPATH=$(PWD) .venv/bin/python app/server.py
+# PlantUML JAR — use devcontainer copy for local dev unless already set
+PLANTUML_JAR ?= $(PWD)/.devcontainer/plantuml/plantuml.jar
 
-# Streamlit frontend
-.PHONY: streamlit
-streamlit:
-	PYTHONPATH=$(PWD) .venv/bin/streamlit run streamlit_app.py --server.port 8501
+# Run both backend and frontend
+.PHONY: run backend frontend
+run:
+	@echo "Starting backend and frontend..."
+	$(MAKE) backend &
+	$(MAKE) frontend
+
+backend:
+	JAVA_TOOL_OPTIONS="-Djava.awt.headless=true" UMLBOT_PLANTUML_JAR_PATH=$(PLANTUML_JAR) PYTHONPATH=$(PWD) .venv/bin/python app/server.py
+
+frontend:
+	PYTHONPATH=$(PWD) .venv/bin/streamlit run streamlit/diagram_builder.py --server.port 8501
 
 # Full-stack single container
 .PHONY: docker-build

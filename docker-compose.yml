@@ -6,7 +6,7 @@ services:
       UMLBOT_PLANTUML_JAR_PATH: /opt/plantuml/plantuml.jar
       REASONING_EFFORT: ${REASONING_EFFORT:-low}
     ports:
-      - "8000:8000"
+      - "${UMLBOT_API_PORT:-8000}:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -20,10 +20,25 @@ services:
     command: ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
     environment:
       PYTHONUNBUFFERED: 1
-      UMLBOT_ENDPOINT: http://umlbot:8000
+      UMLBOT_ENDPOINT: http://umlbot:8000  # reach the backend over compose DNS
     ports:
-      - "8501:8501"
+      - "${UMLBOT_STREAMLIT_PORT:-8501}:8501"
+    secrets:
+      - azure_proxy_key
+      - azure_proxy_endpoint
     depends_on:
       umlbot:
         condition: service_healthy
     restart: unless-stopped
+
+secrets:
+  azure_proxy_key:
+    file: /mnt/p/Secrets/azure_proxy_key.txt
+    # ── .env alternative ────────────────────────────────────────────────
+    # No /mnt/p/Secrets mount? Comment the `file:` line above, uncomment the
+    # `environment:` line below, then `cp .env.example .env` and fill it in.
+    # A secret takes exactly one source — keep only one of the two active.
+    # environment: azure_proxy_key
+  azure_proxy_endpoint:
+    file: /mnt/p/Secrets/azure_proxy_endpoint.txt
+    # environment: azure_proxy_endpoint

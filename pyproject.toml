@@ -7,13 +7,17 @@ dependencies = [
     # Runtime ---------------------------------------------------------------
     "aiweb-common @ git+https://github.com/UABPeriopAI/llm_utils.git@develop",
     "fastapi>=0.118.3",
-    "langchain-openai>=1.1.0",
+    "langchain-openai>=1.1.14",
     "openai>=2.20.0",
-    "Pillow",
-    "python-multipart>=0.0.20",
+    "Pillow>=12.2.0",
+    "python-multipart>=0.0.26",
     "rich>=14.2.0",
     "streamlit>=1.50.0",
     "uvicorn>=0.37.0",
+    # Pinned transitive deps to fix known vulnerabilities
+    "aiohttp>=3.14.0",
+    "pyjwt>=2.13.0",
+    "starlette>=1.0.1",
     # Dev / CI (--no-dev unreliable on Azure, so these stay here) -----------
     "autopep8",
     "black",
