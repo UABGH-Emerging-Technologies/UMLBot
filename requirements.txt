@@ -32,3 +32,4 @@ fastapi
 ./llm_utils
 pytest
 gradio
+fastmcp>=2.12

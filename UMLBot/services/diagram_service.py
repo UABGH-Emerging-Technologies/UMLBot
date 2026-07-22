@@ -6,7 +6,6 @@ import base64
 import io
 import logging
 import re
-import zlib
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -14,6 +13,7 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 
 from UMLBot.config.config import UMLBotConfig
+from UMLBot.rendering import build_plantuml_image_url as _render_build_image_url
 from UMLBot.uml_draft_handler import UMLDraftHandler
 
 LOGGER = logging.getLogger(__name__)
@@ -22,6 +22,7 @@ LOGGER = logging.getLogger(__name__)
 @dataclass
 class DiagramGenerationResult:
     """Result container for a UML generation request."""
+
     plantuml_code: str
     pil_image: Image.Image | None
     status_message: str
@@ -114,19 +115,11 @@ def diagram_image_to_base64(image: Image.Image | None) -> Optional[str]:
 
 
 def build_plantuml_image_url(plantuml_code: str) -> str:
-    """Build a PlantUML render URL for the given diagram code."""
-    encoded = _plantuml_encode(plantuml_code)
-    return _build_plantuml_url(UMLBotConfig.PLANTUML_SERVER_URL_TEMPLATE, encoded)
-
-
-def _build_plantuml_url(template: str, encoded: str) -> str:
-    """
-    Support both full templates (with {encoded}) and base URLs.
-    """
-    if "{encoded}" in template:
-        return template.format(encoded=encoded)
-    base = template.rstrip("/")
-    return f"{base}/{encoded}"
+    """Build a PlantUML render URL for the given diagram code (uses the configured server)."""
+    return _render_build_image_url(
+        plantuml_code,
+        UMLBotConfig.PLANTUML_SERVER_URL_TEMPLATE,
+    )
 
 
 def _strip_code_block_markers(text: str) -> str:
@@ -186,15 +179,3 @@ def _create_placeholder_image(message: str) -> Image.Image:
         font = ImageFont.load_default()
     draw.text((20, 80), message, fill="red", font=font)
     return image
-
-
-def _plantuml_encode(text: str) -> str:
-    """Encode PlantUML text for the server URL format."""
-    compressor = zlib.compressobj(level=9, wbits=-15)
-    compressed = compressor.compress(text.encode("utf-8")) + compressor.flush()
-    b64 = base64.b64encode(compressed).decode("utf-8")
-    translation = str.maketrans(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
-        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_",
-    )
-    return b64.translate(translation)

@@ -95,6 +95,13 @@ dev = [
   "mkdocstrings[python]",
   "mkdocs-monorepo-plugin"
 ]
+# MCP server (PlantUML rendering + NL->diagram generation tools)
+mcp = [
+  "fastmcp>=2.12",
+]
+
+[project.scripts]
+umlbot-mcp = "UMLBot.mcp_server:main"
 
 [tool.pytest.ini_options]
 filterwarnings = [
