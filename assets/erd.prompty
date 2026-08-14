@@ -40,18 +40,56 @@ prompt:
     {{ description }}
 
     **Instructions:**
-    - Generate a valid PlantUML ER diagram using Chen-style notation.
-    - Use clear entity names and attribute lists.
-    - Show relationships with cardinalities when specified.
-    - If the theme is provided, include the appropriate PlantUML theme directive.
+    - Generate a valid PlantUML ER diagram using standard `entity` blocks and
+      crow's-foot (Information Engineering) relationship notation.
+    - Wrap the diagram in `@startuml` / `@enduml`.
+    - Do NOT use Chen EER notation, and do NOT emit `@startchen` / `@endchen`.
+      PlantUML's Chen parser rejects the attribute syntax below, silently falls
+      back to "assumed diagram type: class", and the render fails.
+    - Mark primary keys with `*` and the `<<PK>>` stereotype, foreign keys with
+      `<<FK>>`. Separate keys from other attributes with `--`.
+    - Give every attribute a SQL-ish type (INT, VARCHAR, DATE, DATETIME, DECIMAL, TEXT).
+    - Express every relationship with a crow's-foot connector between entities:
+      `||--||` one-to-one, `||--o{` one-to-many (optional), `||--|{` one-to-many
+      (mandatory), `}o--o{` many-to-many. Label it with `: label`.
+    - If a theme is provided, put `!theme <name>` on the line directly after `@startuml`.
     - Do not include any explanatory text, only the PlantUML code block.
     - Ensure the diagram is clear, accurate, and suitable for clinical/engineering review.
 
-    **Output format:**
+    **Output format** — follow this structure exactly:
     ```
-    @startchen
-    [PlantUML ER diagram code here]
-    @endchen
+    @startuml
+    !theme plain
+    hide circle
+    skinparam linetype ortho
+
+    entity "DEPARTMENT" as department {
+      *department_id : INT <<PK>>
+      --
+      name : VARCHAR
+      location : VARCHAR
+    }
+
+    entity "DOCTOR" as doctor {
+      *doctor_id : INT <<PK>>
+      --
+      *department_id : INT <<FK>>
+      first_name : VARCHAR
+      last_name : VARCHAR
+      specialty : VARCHAR
+    }
+
+    entity "APPOINTMENT" as appointment {
+      *appointment_id : INT <<PK>>
+      --
+      *doctor_id : INT <<FK>>
+      appointment_date : DATE
+      status : VARCHAR
+    }
+
+    department ||--o{ doctor : employs
+    doctor ||--o{ appointment : schedules
+    @enduml
     ```
 
     Begin your response with the code block only.
