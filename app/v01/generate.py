@@ -39,6 +39,7 @@ def _generate_and_respond(
             openai_compatible_endpoint=body.openai_compatible_endpoint,
             openai_compatible_key=api_key,
             openai_compatible_model=body.openai_compatible_model,
+            fmt=body.format,
         )
     except Exception:
         LOGGER.exception("Generation failed for %s", generate_method_name)
@@ -57,12 +58,14 @@ def _generate_and_respond(
         )
 
     image_base64 = service.diagram_image_to_base64(result.pil_image)
+    svg_base64 = service.svg_to_base64(result.svg_text)
     return DiagramResponse(
         status=ResponseStatus.ok,
         plantuml_code=result.plantuml_code,
         image_base64=image_base64,
         image_url=result.image_url,
         message=result.status_message,
+        svg_base64=svg_base64,
     )
 
 

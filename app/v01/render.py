@@ -22,13 +22,25 @@ def _render_and_respond(
 ) -> RenderResponse | JSONResponse:
     """Shared logic for all render endpoints."""
     try:
-        pil_image, status_msg, image_url = service.render_diagram_from_code(body.plantuml_code)
-        image_base64 = service.diagram_image_to_base64(pil_image)
+        rendered, status_msg, image_url = service.render_diagram_from_code(
+            body.plantuml_code, fmt=body.format
+        )
+        if isinstance(rendered, str):
+            svg_base64 = service.svg_to_base64(rendered)
+            return RenderResponse(
+                status=ResponseStatus.ok,
+                image_base64=None,
+                image_url=image_url,
+                message=status_msg,
+                svg_base64=svg_base64,
+            )
+        image_base64 = service.diagram_image_to_base64(rendered)
         return RenderResponse(
             status=ResponseStatus.ok,
             image_base64=image_base64,
             image_url=image_url,
             message=status_msg,
+            svg_base64=None,
         )
     except Exception:
         LOGGER.exception("Render failed")

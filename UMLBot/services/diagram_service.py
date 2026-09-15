@@ -9,6 +9,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from typing import Optional, Tuple
+from xml.sax.saxutils import escape
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -34,6 +35,7 @@ class DiagramGenerationResult:
     pil_image: Image.Image | None
     status_message: str
     image_url: str
+    svg_text: Optional[str] = None
 
 
 class DiagramService:
@@ -47,6 +49,7 @@ class DiagramService:
         openai_compatible_endpoint: str = "",
         openai_compatible_key: str = "",
         openai_compatible_model: str = "",
+        fmt: str = "png",
     ) -> DiagramGenerationResult:
         """Run the UMLDraftHandler pipeline and return PlantUML code plus rendered image."""
         handler = UMLDraftHandler()
@@ -60,6 +63,7 @@ class DiagramService:
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
+            fmt=fmt,
         )
 
     def generate_mindmap_from_description(
@@ -70,6 +74,7 @@ class DiagramService:
         openai_compatible_endpoint: str = "",
         openai_compatible_key: str = "",
         openai_compatible_model: str = "",
+        fmt: str = "png",
     ) -> DiagramGenerationResult:
         """Run the MindmapDraftHandler pipeline and return PlantUML code plus rendered image."""
         handler = MindmapDraftHandler()
@@ -83,6 +88,7 @@ class DiagramService:
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
+            fmt=fmt,
         )
 
     def generate_ui_mockup_from_description(
@@ -93,6 +99,7 @@ class DiagramService:
         openai_compatible_endpoint: str = "",
         openai_compatible_key: str = "",
         openai_compatible_model: str = "",
+        fmt: str = "png",
     ) -> DiagramGenerationResult:
         """Run the UIMockupDraftHandler pipeline and return PlantUML SALT code plus rendered image."""
         handler = UIMockupDraftHandler()
@@ -106,6 +113,7 @@ class DiagramService:
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
+            fmt=fmt,
         )
 
     def generate_gantt_from_description(
@@ -116,6 +124,7 @@ class DiagramService:
         openai_compatible_endpoint: str = "",
         openai_compatible_key: str = "",
         openai_compatible_model: str = "",
+        fmt: str = "png",
     ) -> DiagramGenerationResult:
         """Run the GanttDraftHandler pipeline and return PlantUML Gantt code plus rendered image."""
         handler = GanttDraftHandler()
@@ -129,6 +138,7 @@ class DiagramService:
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
+            fmt=fmt,
         )
 
     def generate_erd_from_description(
@@ -139,6 +149,7 @@ class DiagramService:
         openai_compatible_endpoint: str = "",
         openai_compatible_key: str = "",
         openai_compatible_model: str = "",
+        fmt: str = "png",
     ) -> DiagramGenerationResult:
         """Run the ERDraftHandler pipeline and return PlantUML ER diagram code plus rendered image."""
         handler = ERDraftHandler()
@@ -152,6 +163,7 @@ class DiagramService:
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
+            fmt=fmt,
         )
 
     def generate_json_from_description(
@@ -162,6 +174,7 @@ class DiagramService:
         openai_compatible_endpoint: str = "",
         openai_compatible_key: str = "",
         openai_compatible_model: str = "",
+        fmt: str = "png",
     ) -> DiagramGenerationResult:
         """Run the JsonDraftHandler pipeline and return PlantUML JSON code plus rendered image."""
         handler = JsonDraftHandler()
@@ -175,6 +188,7 @@ class DiagramService:
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
+            fmt=fmt,
         )
 
     def generate_c4_from_description(
@@ -185,6 +199,7 @@ class DiagramService:
         openai_compatible_endpoint: str = "",
         openai_compatible_key: str = "",
         openai_compatible_model: str = "",
+        fmt: str = "png",
     ) -> DiagramGenerationResult:
         """Run the C4DraftHandler pipeline and return PlantUML C4 diagram code plus rendered image."""
         handler = C4DraftHandler()
@@ -198,20 +213,27 @@ class DiagramService:
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
+            fmt=fmt,
         )
 
-    def render_diagram_from_code(self, plantuml_code: str) -> Tuple[Image.Image, str, str]:
+    def render_diagram_from_code(
+        self, plantuml_code: str, fmt: str = "png"
+    ) -> Tuple[Image.Image | str, str, str]:
         """Re-render an already generated PlantUML snippet via the local JAR.
 
         Returns a placeholder image if the render fails so the UI can continue gracefully.
         """
-        pil_image, status_msg = _render_plantuml_jar(
+        rendered, status_msg = _render_plantuml_jar(
             plantuml_code=plantuml_code,
             status_msg="Re-rendered from PlantUML code.",
+            fmt=fmt,
         )
-        if pil_image is None:
-            pil_image = _create_placeholder_image("Diagram preview unavailable")
-        return pil_image, status_msg, ""
+        if rendered is None:
+            if fmt == "svg":
+                rendered = _create_placeholder_svg("Diagram preview unavailable")
+            else:
+                rendered = _create_placeholder_image("Diagram preview unavailable")
+        return rendered, status_msg, ""
 
     def diagram_image_to_base64(self, image: Image.Image | None) -> Optional[str]:
         """Encode a PIL image to a base64 PNG string."""
@@ -221,6 +243,12 @@ class DiagramService:
         image.save(buf, format="PNG")
         buf.seek(0)
         return base64.b64encode(buf.read()).decode("utf-8")
+
+    def svg_to_base64(self, svg_text: Optional[str]) -> Optional[str]:
+        """Encode an SVG string to a base64 UTF-8 string."""
+        if not svg_text:
+            return None
+        return base64.b64encode(svg_text.encode("utf-8")).decode("utf-8")
 
     def _generate_from_description(
         self,
@@ -233,6 +261,7 @@ class DiagramService:
         openai_compatible_endpoint: str,
         openai_compatible_key: str,
         openai_compatible_model: str,
+        fmt: str = "png",
     ) -> DiagramGenerationResult:
         """Shared diagram generation pipeline with per-request LLM credentials."""
         _use_responses: bool = is_responses_api_model(openai_compatible_model)
@@ -263,15 +292,23 @@ class DiagramService:
 
         cleaned_code = _strip_code_block_markers(plantuml_code)
         normalized_code = _normalize_curly_braces(cleaned_code)
-        pil_image, status_msg = _render_plantuml_jar(
+        rendered, status_msg = _render_plantuml_jar(
             plantuml_code=normalized_code,
             status_msg=status_msg,
+            fmt=fmt,
         )
+        if fmt == "svg":
+            pil_image = None
+            svg_text = rendered
+        else:
+            pil_image = rendered
+            svg_text = None
         return DiagramGenerationResult(
             plantuml_code=normalized_code,
             pil_image=pil_image,
             status_message=status_msg,
             image_url="",
+            svg_text=svg_text,
         )
 
 
@@ -296,15 +333,19 @@ def _normalize_curly_braces(plantuml_code: str) -> str:
 def _render_plantuml_jar(
     plantuml_code: str,
     status_msg: str,
-) -> Tuple[Image.Image | None, str]:
-    """Render PlantUML code to a PNG image using the local PlantUML JAR.
+    fmt: str = "png",
+) -> Tuple[Image.Image | str | None, str]:
+    """Render PlantUML code using the local PlantUML JAR.
 
-    Invokes ``java -jar plantuml.jar -tpng -pipe`` with the code on stdin.
+    Invokes ``java -jar plantuml.jar -t<fmt> -pipe`` with the code on stdin.
+    Returns SVG text for fmt="svg", or a PIL Image for fmt="png".
     """
+    if fmt not in ("png", "svg"):
+        fmt = "png"
     jar_path = UMLBotConfig.PLANTUML_JAR_PATH
     try:
         proc = subprocess.run(
-            ["java", "-Xmx256m", "-jar", jar_path, "-tpng", "-pipe"],
+            ["java", "-Xmx256m", "-jar", jar_path, f"-t{fmt}", "-pipe"],
             input=plantuml_code.encode("utf-8"),
             capture_output=True,
             timeout=30,
@@ -321,6 +362,8 @@ def _render_plantuml_jar(
                 status_msg = failure_msg
             return None, status_msg
 
+        if fmt == "svg":
+            return proc.stdout.decode("utf-8"), status_msg
         return Image.open(io.BytesIO(proc.stdout)), status_msg
     except Exception as exc:
         LOGGER.warning("PlantUML JAR rendering failed: %s", exc)
@@ -344,3 +387,18 @@ def _create_placeholder_image(message: str) -> Image.Image:
         font = ImageFont.load_default()
     draw.text((20, 80), message, fill="red", font=font)
     return image
+
+
+def _create_placeholder_svg(message: str) -> str:
+    """Create a placeholder SVG image with a short error message."""
+    truncated = message[:60]
+    escaped = escape(truncated)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">'
+        '<rect width="400" height="200" fill="white"/>'
+        f'<text x="20" y="100" fill="red" font-family="sans-serif" font-size="16">'
+        f"{escaped}"
+        "</text>"
+        "</svg>"
+    )

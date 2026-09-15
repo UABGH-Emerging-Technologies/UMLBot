@@ -1,7 +1,7 @@
 """Pydantic request/response models for the v01 API."""
 
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,7 @@ class UMLGenerateRequest(BaseModel):
     theme: Optional[str] = None
     openai_compatible_endpoint: str = Field(..., min_length=1)
     openai_compatible_model: str = Field(..., min_length=1)
+    format: Literal["png", "svg"] = "png"
 
 
 class GenerateRequest(BaseModel):
@@ -46,12 +47,14 @@ class GenerateRequest(BaseModel):
     theme: Optional[str] = None
     openai_compatible_endpoint: str = Field(..., min_length=1)
     openai_compatible_model: str = Field(..., min_length=1)
+    format: Literal["png", "svg"] = "png"
 
 
 class RenderRequest(BaseModel):
     """Request body for render endpoints — no LLM fields needed."""
 
     plantuml_code: str = Field(..., min_length=1)
+    format: Literal["png", "svg"] = "png"
 
 
 class DiagramResponse(BaseModel):
@@ -60,6 +63,7 @@ class DiagramResponse(BaseModel):
     status: ResponseStatus
     plantuml_code: str = ""
     image_base64: Optional[str] = None
+    svg_base64: Optional[str] = None
     image_url: str = ""
     message: str = ""
 
@@ -69,6 +73,7 @@ class RenderResponse(BaseModel):
 
     status: ResponseStatus
     image_base64: Optional[str] = None
+    svg_base64: Optional[str] = None
     image_url: str = ""
     message: str = ""
 
