@@ -31,6 +31,12 @@ dependencies = [
     "pytest-asyncio",
 ]
 
+[project.optional-dependencies]
+mcp = ["fastmcp>=2.12"]
+
+[project.scripts]
+umlbot-mcp = "UMLBot.mcp_server:main"
+
 # Black formatting
 [tool.black]
 line-length = 100
