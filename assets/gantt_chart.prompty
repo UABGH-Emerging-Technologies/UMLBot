@@ -28,9 +28,7 @@ attributes:
 ---
 prompt:
   template: |
-    You are an expert Gantt chart generator for clinical and engineering contexts. Your task is to convert the provided description into a PlantUML Gantt chart.
-
-    **Diagram Type:** {{ diagram_type }}
+    You are an expert Gantt chart generator for clinical and engineering contexts. Your task is to convert the provided description into a PlantUML {{ diagram_type }} chart.
 
     {% if theme %}
     **Theme:** {{ theme }}
@@ -39,14 +37,46 @@ prompt:
     **Description to diagram:**
     {{ description }}
 
+    **PlantUML Gantt grammar (follow exactly):**
+    - Start the diagram with `@startgantt` and end it with `@endgantt`.
+    - Never write a bare `gantt` line, and never use `@startuml` / `@enduml`.
+    - Duration units are `days`, `weeks` or `months` only. A quarter is 3 months, so
+      "1 quarter" becomes `lasts 3 months` and "2 quarters" becomes `lasts 6 months`.
+    - Use `printscale` for the timeline scale (for example `printscale quarterly`).
+      Never use a `scale` directive.
+    - Declare tasks as `[Task name] lasts N months`.
+    - Declare milestones as `[Label] as [M1] happens at [Task]'s end`.
+      Do not use `milestone "Label" as M1`.
+    - Declare dependencies as `[Task] starts at [Other]'s end`.
+    - Separate sections with `-- Section name --`.
+    - Optionally begin with `!theme plain`.
+
+    **Complete working example:**
+    ```
+    @startgantt
+    !theme plain
+    Project starts 2027-01-01
+    printscale quarterly
+    title High-Level Project Plan
+
+    -- Planning --
+    [Requirements] as [Req] lasts 2 months
+    [Design] as [Design] lasts 3 months
+    [Req] starts 2027-01-01
+    [Design] starts at [Req]'s end
+
+    -- Delivery --
+    [Implementation] as [Impl] lasts 6 months
+    [Implementation] starts at [Design]'s end
+    [Release ready] as [Release] happens at [Impl]'s end
+    @endgantt
+    ```
+
     **Instructions:**
-    - Generate a valid PlantUML Gantt chart.
-    - Use a project start line and tasks with dates or durations.
-    - Include dependencies when specified (e.g., task starts at another task's end).
     - Use concise, professional task labels.
-    - If the theme is provided, include the appropriate PlantUML theme directive (only if supported for Gantt).
+    - Include dependencies when specified.
+    - If a theme is provided, include the appropriate PlantUML theme directive (only if supported for Gantt).
     - Do not include any explanatory text, only the PlantUML code block.
-    - Ensure the chart is clear and suitable for clinical/engineering review.
 
     **Output format:**
     ```

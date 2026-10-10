@@ -22,8 +22,12 @@ from UMLBot.diagram_handlers import (
     UIMockupDraftHandler,
     UMLDraftHandler,
 )
+from UMLBot.utils.plantuml_sanitizer import sanitize_plantuml
 
 LOGGER = logging.getLogger(__name__)
+
+# Maximum number of LLM-backed repair attempts after a failed render.
+MAX_REPAIR_ATTEMPTS = 2
 
 
 @dataclass
@@ -34,6 +38,7 @@ class DiagramGenerationResult:
     pil_image: Image.Image | None
     status_message: str
     image_url: str
+    render_ok: bool = False
 
 
 class DiagramService:
@@ -57,6 +62,7 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_PLANTUML_TEMPLATE,
             failure_log="LLM-backed generation failed, returning fallback diagram.",
+            mode="uml",
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
@@ -80,6 +86,7 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_MINDMAP_TEMPLATE,
             failure_log="LLM-backed mindmap generation failed, returning fallback diagram.",
+            mode="mindmap",
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
@@ -103,6 +110,7 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_SALT_TEMPLATE,
             failure_log="LLM-backed UI mockup generation failed, returning fallback diagram.",
+            mode="ui_mockup",
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
@@ -126,6 +134,7 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_GANTT_TEMPLATE,
             failure_log="LLM-backed Gantt generation failed, returning fallback diagram.",
+            mode="gantt",
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
@@ -149,6 +158,7 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_ERD_TEMPLATE,
             failure_log="LLM-backed ERD generation failed, returning fallback diagram.",
+            mode="erd",
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
@@ -172,6 +182,7 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_JSON_TEMPLATE,
             failure_log="LLM-backed JSON generation failed, returning fallback diagram.",
+            mode="json",
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
@@ -195,23 +206,29 @@ class DiagramService:
             theme=theme,
             fallback_template=UMLBotConfig.FALLBACK_C4_TEMPLATE,
             failure_log="LLM-backed C4 generation failed, returning fallback diagram.",
+            mode="c4",
             openai_compatible_endpoint=openai_compatible_endpoint,
             openai_compatible_key=openai_compatible_key,
             openai_compatible_model=openai_compatible_model,
         )
 
-    def render_diagram_from_code(self, plantuml_code: str) -> Tuple[Image.Image, str, str]:
+    def render_diagram_from_code(
+        self, plantuml_code: str, mode: str = "uml"
+    ) -> Tuple[Image.Image, str, str, bool]:
         """Re-render an already generated PlantUML snippet via the local JAR.
 
         Returns a placeholder image if the render fails so the UI can continue gracefully.
+        The final value reports whether the JAR rendered successfully.
         """
-        pil_image, status_msg = _render_plantuml_jar(
-            plantuml_code=plantuml_code,
+        sanitized_code = sanitize_plantuml(plantuml_code, mode)
+        pil_image, status_msg, render_ok = _render_plantuml_jar(
+            plantuml_code=sanitized_code,
             status_msg="Re-rendered from PlantUML code.",
         )
         if pil_image is None:
             pil_image = _create_placeholder_image("Diagram preview unavailable")
-        return pil_image, status_msg, ""
+            render_ok = False
+        return pil_image, status_msg, "", render_ok
 
     def diagram_image_to_base64(self, image: Image.Image | None) -> Optional[str]:
         """Encode a PIL image to a base64 PNG string."""
@@ -233,6 +250,7 @@ class DiagramService:
         openai_compatible_endpoint: str,
         openai_compatible_key: str,
         openai_compatible_model: str,
+        mode: str = "uml",
     ) -> DiagramGenerationResult:
         """Shared diagram generation pipeline with per-request LLM credentials."""
         _use_responses: bool = is_responses_api_model(openai_compatible_model)
@@ -245,6 +263,7 @@ class DiagramService:
             reasoning_effort=UMLBotConfig.REASONING_EFFORT if _use_responses else None,
         )
 
+        llm_succeeded = True
         try:
             plantuml_code = handler.process(
                 diagram_type=diagram_type,
@@ -252,26 +271,51 @@ class DiagramService:
                 theme=theme,
                 llm_interface=handler.llm_interface,
             )
-            status_msg = UMLBotConfig.DIAGRAM_SUCCESS_MSG
+            base_status = UMLBotConfig.DIAGRAM_SUCCESS_MSG
         except Exception as exc:
             LOGGER.exception(failure_log)
             plantuml_code = fallback_template.format(
                 diagram_type=diagram_type,
                 description=description,
             )
-            status_msg = f"LLM error: {exc}. Showing fallback stub."
+            base_status = f"LLM error: {exc}. Showing fallback stub."
+            llm_succeeded = False
 
-        cleaned_code = _strip_code_block_markers(plantuml_code)
-        normalized_code = _normalize_curly_braces(cleaned_code)
-        pil_image, status_msg = _render_plantuml_jar(
-            plantuml_code=normalized_code,
-            status_msg=status_msg,
+        current_code = sanitize_plantuml(
+            _normalize_curly_braces(_strip_code_block_markers(plantuml_code)),
+            mode,
         )
+        pil_image, status_msg, render_ok = _render_plantuml_jar(
+            plantuml_code=current_code,
+            status_msg=base_status,
+        )
+
+        if not render_ok and llm_succeeded:
+            for _attempt in range(MAX_REPAIR_ATTEMPTS):
+                repair_prompt = _build_repair_prompt(current_code, status_msg)
+                try:
+                    response = handler.llm_interface.invoke(repair_prompt)
+                    repaired_code = handler.check_content_type(response)
+                except Exception as exc:
+                    LOGGER.warning("LLM repair attempt failed: %s", exc)
+                    break
+                current_code = sanitize_plantuml(
+                    _normalize_curly_braces(_strip_code_block_markers(repaired_code)),
+                    mode,
+                )
+                pil_image, status_msg, render_ok = _render_plantuml_jar(
+                    plantuml_code=current_code,
+                    status_msg=base_status,
+                )
+                if render_ok:
+                    break
+
         return DiagramGenerationResult(
-            plantuml_code=normalized_code,
+            plantuml_code=current_code,
             pil_image=pil_image,
             status_message=status_msg,
             image_url="",
+            render_ok=render_ok,
         )
 
 
@@ -296,10 +340,12 @@ def _normalize_curly_braces(plantuml_code: str) -> str:
 def _render_plantuml_jar(
     plantuml_code: str,
     status_msg: str,
-) -> Tuple[Image.Image | None, str]:
+) -> Tuple[Image.Image | None, str, bool]:
     """Render PlantUML code to a PNG image using the local PlantUML JAR.
 
     Invokes ``java -jar plantuml.jar -tpng -pipe`` with the code on stdin.
+    Returns the image (or ``None``), the status message, and whether the JAR
+    exited successfully without raising.
     """
     jar_path = UMLBotConfig.PLANTUML_JAR_PATH
     try:
@@ -319,9 +365,9 @@ def _render_plantuml_jar(
                 status_msg = f"{status_msg} | {failure_msg}"
             else:
                 status_msg = failure_msg
-            return None, status_msg
+            return None, status_msg, False
 
-        return Image.open(io.BytesIO(proc.stdout)), status_msg
+        return Image.open(io.BytesIO(proc.stdout)), status_msg, True
     except Exception as exc:
         LOGGER.warning("PlantUML JAR rendering failed: %s", exc)
         failure_msg = f"PlantUML rendering failed: {exc}"
@@ -331,7 +377,47 @@ def _render_plantuml_jar(
             status_msg = f"{status_msg} | {failure_msg}"
         else:
             status_msg = failure_msg
-        return None, status_msg
+        return None, status_msg, False
+
+
+def _build_repair_prompt(code: str, stderr: str) -> str:
+    """Build the LLM repair prompt for PlantUML code that failed to render.
+
+    PlantUML reports ``ERROR\\n<line>\\n<message>`` where ``<line>`` is the
+    1-based line number in the code sent to the JAR.  The first integer-only
+    line found in ``stderr`` is treated as that line number so the offending
+    line text can be included in the prompt.
+    """
+    line_number: int | None = None
+    match = re.search(r"^\s*(\d+)\s*$", stderr or "", re.MULTILINE)
+    if match:
+        line_number = int(match.group(1))
+
+    offending_line = ""
+    if line_number is not None:
+        code_lines = code.splitlines()
+        if 1 <= line_number <= len(code_lines):
+            offending_line = code_lines[line_number - 1]
+
+    prompt_parts = [
+        "The following PlantUML code failed to render.",
+        "",
+        "Code:",
+        code,
+        "",
+        "PlantUML error output:",
+        stderr or "",
+    ]
+    if offending_line:
+        prompt_parts.extend(["", f"Offending line {line_number}: {offending_line}"])
+    prompt_parts.extend(
+        [
+            "",
+            "Fix the syntax error and return only the corrected PlantUML code,",
+            "with no explanation and no markdown code fences.",
+        ]
+    )
+    return "\n".join(prompt_parts)
 
 
 def _create_placeholder_image(message: str) -> Image.Image:

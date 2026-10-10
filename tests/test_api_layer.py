@@ -128,6 +128,7 @@ def test_render_uml_success(mock_render: MagicMock, client: TestClient) -> None:
         Image.new("RGB", (10, 10), color="white"),
         "Rendered",
         "",
+        True,
     )
     resp = client.post("/v01/render", json={"plantuml_code": "@startuml\n@enduml"})
     assert resp.status_code == 200
@@ -147,6 +148,7 @@ def test_render_mindmap_no_auth_needed(mock_render: MagicMock, client: TestClien
         Image.new("RGB", (10, 10), color="white"),
         "Rendered",
         "",
+        True,
     )
     resp = client.post("/v01/mindmap/render", json={"plantuml_code": "@startmindmap\n@endmindmap"})
     assert resp.status_code == 200

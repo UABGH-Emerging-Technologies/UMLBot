@@ -62,6 +62,7 @@ class DiagramResponse(BaseModel):
     image_base64: Optional[str] = None
     image_url: str = ""
     message: str = ""
+    render_ok: bool = False
 
 
 class RenderResponse(BaseModel):
@@ -71,6 +72,7 @@ class RenderResponse(BaseModel):
     image_base64: Optional[str] = None
     image_url: str = ""
     message: str = ""
+    render_ok: bool = False
 
 
 class ConfigResponse(BaseModel):

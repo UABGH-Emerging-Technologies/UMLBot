@@ -12,7 +12,7 @@ RUN apt-get update \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-ADD https://github.com/plantuml/plantuml/releases/latest/download/plantuml.jar /opt/plantuml/plantuml.jar
+ADD https://github.com/plantuml/plantuml/releases/download/v1.2026.8/plantuml-1.2026.8.jar /opt/plantuml/plantuml.jar
 ENV UMLBOT_PLANTUML_JAR_PATH=/opt/plantuml/plantuml.jar
 
 WORKDIR /app

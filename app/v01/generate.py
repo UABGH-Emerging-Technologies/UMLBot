@@ -63,6 +63,7 @@ def _generate_and_respond(
         image_base64=image_base64,
         image_url=result.image_url,
         message=result.status_message,
+        render_ok=result.render_ok,
     )
 
 
