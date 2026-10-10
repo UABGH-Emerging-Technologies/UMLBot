@@ -376,6 +376,7 @@ def _init_session_state(config: Dict[str, Any]) -> None:
         for field, default in [
             ("chat_history", []),
             ("plantuml_code", ""),
+            ("code_editor", ""),
             ("image_base64", None),
             ("status_message", ""),
             ("error_message", ""),
@@ -440,6 +441,9 @@ def _handle_chat_input(
     if result["status"] == "ok":
         if result["plantuml_code"]:
             st.session_state[code_key] = result["plantuml_code"]
+            # A keyed text_area ignores later ``value=`` changes, so write the
+            # new code into the editor's own state for it to show up.
+            st.session_state[_state_key(mode, "code_editor")] = result["plantuml_code"]
         if result["image_base64"]:
             st.session_state[img_key] = result["image_base64"]
         st.session_state[status_key] = result.get("message", "Diagram generated.")
@@ -533,9 +537,8 @@ def _render_mode_tab(mode: str, config: Dict[str, Any]) -> None:
         st.subheader("PlantUML Code")
         new_code: str = st.text_area(
             "Edit PlantUML code",
-            value=st.session_state.get(code_key, ""),
             height=400,
-            key=f"code_editor_{mode}",
+            key=_state_key(mode, "code_editor"),
             label_visibility="collapsed",
         )
         if new_code != st.session_state.get(code_key, ""):
