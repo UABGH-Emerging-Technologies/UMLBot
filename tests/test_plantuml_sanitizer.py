@@ -114,6 +114,10 @@ class TestGanttNoOps:
         code = "[Task] lasts 1 day"
         assert sanitize_plantuml(code, "gantt") == "@startgantt\n[Task] lasts 1 day\n@endgantt"
 
+    def test_missing_start_with_stray_end_not_doubled(self) -> None:
+        code = "[Task] lasts 1 day\n@enduml"
+        assert sanitize_plantuml(code, "gantt") == "@startgantt\n[Task] lasts 1 day\n@endgantt"
+
 
 class TestOtherModes:
     """json and ui_mockup fix only the wrapper; other modes are no-ops."""

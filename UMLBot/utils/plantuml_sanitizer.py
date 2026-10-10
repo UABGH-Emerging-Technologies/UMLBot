@@ -105,7 +105,8 @@ def _fix_wrapper(code: str, kind: str) -> str:
             end_index = index
 
     if start_index is None:
-        return f"@start{kind}\n{code}\n@end{kind}"
+        body = "\n".join(line for line in lines if not line.strip().startswith("@end"))
+        return f"@start{kind}\n{body}\n@end{kind}"
 
     lines[start_index] = _START_TAG_RE.sub(f"@start{kind}", lines[start_index])
     if end_index is not None:
