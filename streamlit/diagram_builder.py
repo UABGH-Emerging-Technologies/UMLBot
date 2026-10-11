@@ -145,6 +145,9 @@ def _handle_chat_input(mode: str, user_message: str) -> None:
         history.append({"role": "assistant", "content": f"Error: {error}"})
     elif result and result.get("status") == "ok":
         st.session_state[code_key] = result.get("plantuml_code", current_code)
+        # A keyed text_area ignores later ``value=`` changes, so write the new
+        # code into the editor's own state for it to show up.
+        st.session_state[_state_key(mode, "code_editor")] = st.session_state[code_key]
         st.session_state[img_key] = result.get("image_base64")
         message = result.get("message", "Diagram generated.")
         st.session_state[status_key] = message
@@ -333,9 +336,8 @@ def _render_mode_tab(mode: str) -> None:
     with st.expander("Diagram code", expanded=False):
         new_code = st.text_area(
             "Edit diagram text",
-            value=st.session_state.get(code_key, ""),
             height=300,
-            key=f"code_editor_{mode}",
+            key=_state_key(mode, "code_editor"),
             label_visibility="collapsed",
         )
         if new_code != st.session_state.get(code_key, ""):
