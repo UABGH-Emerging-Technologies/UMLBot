@@ -9,8 +9,9 @@ well-understood defects described below and leave everything else untouched.
 Supported modes (values match the API request modes):
 
 * ``"gantt"``      -- fix the wrapper, drop bare ``gantt`` lines, convert
-  ``N quarters`` durations to months, drop unit ``scale`` directives, and
-  normalise ``milestone`` declarations.
+  ``N quarters`` / ``N years`` durations to months, drop unit ``scale`` and
+  invalid ``printscale`` directives, turn ``section X`` into ``-- X --``,
+  normalise ``milestone`` declarations, and bracket bare task aliases.
 * ``"json"``        -- fix the ``@startjson`` / ``@endjson`` wrapper only.
 * ``"ui_mockup"``   -- fix the ``@startsalt`` / ``@endsalt`` wrapper only.
 * ``"uml"``, ``"mindmap"``, ``"erd"``, ``"c4"`` and any unknown mode -- the
@@ -42,8 +43,20 @@ _SCALE_UNIT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ``printscale <x>`` where <x> is not a real scale (e.g. ``printscale true``).
+_BAD_PRINTSCALE_RE = re.compile(
+    r"^\s*printscale\s+(?!(?:daily|weekly|monthly|quarterly|yearly)\b)\S.*$",
+    re.IGNORECASE,
+)
+
+# Mermaid-style ``section Name`` -> ``-- Name --``.
+_SECTION_RE = re.compile(r"^(\s*)section\s+(.+?)\s*$", re.IGNORECASE)
+
 # ``lasts N quarters`` / ``lasts N quarter`` -> ``lasts (N * 3) months``.
 _QUARTER_DURATION_RE = re.compile(r"\blasts\s+(\d+)\s+quarters?\b", re.IGNORECASE)
+
+# ``lasts N years`` / ``lasts N year`` -> ``lasts (N * 12) months``.
+_YEAR_DURATION_RE = re.compile(r"\blasts\s+(\d+)\s+years?\b", re.IGNORECASE)
 
 # ``milestone "Label" as M1`` -> ``[Label] as [M1]``.
 _MILESTONE_RE = re.compile(r'milestone\s+"([^"]*)"\s+as\s+(\S+)', re.IGNORECASE)
@@ -82,9 +95,11 @@ def _sanitize_gantt(code: str) -> str:
     for line in lines:
         if _BARE_GANTT_RE.match(line):
             continue
-        if _SCALE_UNIT_RE.match(line):
+        if _SCALE_UNIT_RE.match(line) or _BAD_PRINTSCALE_RE.match(line):
             continue
+        line = _SECTION_RE.sub(r"\1-- \2 --", line)
         line = _QUARTER_DURATION_RE.sub(_months_from_quarters, line)
+        line = _YEAR_DURATION_RE.sub(_months_from_years, line)
         line = _MILESTONE_RE.sub(_bracket_milestone, line)
         result.append(line)
     return "\n".join(_bracket_bare_aliases(result))
@@ -157,6 +172,11 @@ def _fix_wrapper(code: str, kind: str) -> str:
 def _months_from_quarters(match: re.Match[str]) -> str:
     """Rewrite ``lasts N quarters`` as ``lasts (N * 3) months``."""
     return f"lasts {int(match.group(1)) * 3} months"
+
+
+def _months_from_years(match: re.Match[str]) -> str:
+    """Rewrite ``lasts N years`` as ``lasts (N * 12) months``."""
+    return f"lasts {int(match.group(1)) * 12} months"
 
 
 def _bracket_milestone(match: re.Match[str]) -> str:

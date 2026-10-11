@@ -1,5 +1,6 @@
 """Unit tests for the deterministic PlantUML sanitizer."""
 
+import re
 import shutil
 from pathlib import Path
 
@@ -167,6 +168,62 @@ class TestGanttBareAliases:
         assert sanitize_plantuml(code, "uml") == code
 
 
+# Real production output: Mermaid-style sections, ``printscale true`` and quarters.
+GANTT_SECTION_FIXTURE = """@startgantt
+' R21 Project Timeline - Brain-Heart Coupling Index (BHCI)
+' High-level Gantt chart by calendar quarters
+
+Project starts 2024-01-01
+scale quarterly
+printscale true
+title Brain-Heart Coupling Index (BHCI) – R21 Gantt Overview
+
+section Year 1 (2024)
+  [Kickoff & Infrastructure Setup]         lasts 1 quarter
+  [Data Extraction & Quality Assurance]    starts 2024-01-01 lasts 2 quarters
+  [BHCI Algorithm Development (Aim 1)]     starts 2024-04-01 lasts 2 quarters
+  [Internal Validation & Lock BHCI]        starts 2024-10-01 lasts 2 quarters
+
+section Year 2 (2025)
+  [Early Warning Analysis (Aim 2)]         starts 2025-01-01 lasts 2 quarters
+  [Impact Assessment & Dissemination]      starts 2025-07-01 lasts 1 quarter
+  [R01 Grant Preparation]                  starts 2025-10-01 lasts 1 quarter
+@endgantt"""
+
+
+class TestGanttSectionsAndScales:
+    """Mermaid ``section`` lines, bogus ``printscale`` values and year durations."""
+
+    def test_section_becomes_separator(self) -> None:
+        code = "@startgantt\nsection Year 1 (2024)\n[A] lasts 1 day\n@endgantt"
+        assert "\n-- Year 1 (2024) --\n" in sanitize_plantuml(code, "gantt")
+
+    def test_invalid_printscale_removed(self) -> None:
+        code = "@startgantt\nprintscale true\n[A] lasts 1 day\n@endgantt"
+        assert sanitize_plantuml(code, "gantt") == "@startgantt\n[A] lasts 1 day\n@endgantt"
+
+    def test_valid_printscale_with_zoom_kept(self) -> None:
+        code = "@startgantt\nprintscale daily zoom 2\n[A] lasts 1 day\n@endgantt"
+        assert sanitize_plantuml(code, "gantt") == code
+
+    def test_year_duration_becomes_months(self) -> None:
+        code = "@startgantt\n[A] lasts 1 year\n[B] lasts 2 years\n@endgantt"
+        expected = "@startgantt\n[A] lasts 12 months\n[B] lasts 24 months\n@endgantt"
+        assert sanitize_plantuml(code, "gantt") == expected
+
+    def test_section_word_in_label_untouched(self) -> None:
+        code = "@startgantt\n[Write section 2] lasts 1 day\n@endgantt"
+        assert sanitize_plantuml(code, "gantt") == code
+
+    def test_real_fixture_has_no_known_defects(self) -> None:
+        out = sanitize_plantuml(GANTT_SECTION_FIXTURE, "gantt")
+        assert "section " not in out
+        assert "printscale true" not in out
+        assert "scale quarterly" not in out
+        assert not re.search(r"lasts \d+ quarters?", out)
+        assert sanitize_plantuml(out, "gantt") == out
+
+
 class TestGanttDefects:
     """Each defect in the table maps to its expected output."""
 
@@ -277,7 +334,9 @@ class TestOtherModes:
     shutil.which("java") is None or not Path(UMLBotConfig.PLANTUML_JAR_PATH).exists(),
     reason="java or the PlantUML jar is not available",
 )
-@pytest.mark.parametrize("fixture", [GANTT_FIXTURE, GANTT_BARE_ALIAS_FIXTURE])
+@pytest.mark.parametrize(
+    "fixture", [GANTT_FIXTURE, GANTT_BARE_ALIAS_FIXTURE, GANTT_SECTION_FIXTURE]
+)
 def test_sanitized_fixture_renders_with_real_jar(fixture: str) -> None:
     from UMLBot.services.diagram_service import _render_plantuml_jar
 

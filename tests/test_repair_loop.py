@@ -86,7 +86,7 @@ def test_repair_stops_after_two_attempts(mock_render: MagicMock) -> None:
 @patch("UMLBot.services.diagram_service._render_plantuml_jar")
 def test_repair_prompt_contains_stderr_and_offending_line(mock_render: MagicMock) -> None:
     mock_render.side_effect = [
-        (None, "Diagram generated, but rendering failed: ERROR\n2\nSyntax Error here", False),
+        (None, "Diagram generated, but rendering failed: ERROR\n1\nSyntax Error here", False),
         (Image.new("RGB", (10, 10), "white"), "Diagram generated successfully using LLM.", True),
     ]
     handler = _make_handler(
@@ -164,3 +164,10 @@ def test_repair_prompt_includes_syntax_hint_when_given() -> None:
 def test_repair_prompt_omits_hint_by_default() -> None:
     prompt = _build_repair_prompt("@startuml\nX\n@enduml", "ERROR\n2\nSyntax Error?")
     assert "rules" not in prompt.lower()
+
+
+def test_repair_prompt_uses_plantuml_zero_based_line_numbers() -> None:
+    # Real jar output: BADLINE is the 3rd line of the source and PlantUML reports "2".
+    code = "@startgantt\nProject starts 2024-01-01\nBADLINE\n@endgantt"
+    prompt = _build_repair_prompt(code, "ERROR\n2\nSyntax Error? (Assumed diagram type: gantt)")
+    assert "Offending line: BADLINE" in prompt

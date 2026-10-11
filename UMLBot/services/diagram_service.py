@@ -398,9 +398,9 @@ def _build_repair_prompt(code: str, stderr: str, syntax_hint: str = "") -> str:
     """Build the LLM repair prompt for PlantUML code that failed to render.
 
     PlantUML reports ``ERROR\\n<line>\\n<message>`` where ``<line>`` is the
-    1-based line number in the code sent to the JAR.  The first integer-only
-    line found in ``stderr`` is treated as that line number so the offending
-    line text can be included in the prompt.
+    0-based line number in the code sent to the JAR (``@start...`` is line 0).
+    The first integer-only line found in ``stderr`` is treated as that line
+    number so the offending line text can be included in the prompt.
     """
     line_number: int | None = None
     match = re.search(r"^\s*(\d+)\s*$", stderr or "", re.MULTILINE)
@@ -410,8 +410,8 @@ def _build_repair_prompt(code: str, stderr: str, syntax_hint: str = "") -> str:
     offending_line = ""
     if line_number is not None:
         code_lines = code.splitlines()
-        if 1 <= line_number <= len(code_lines):
-            offending_line = code_lines[line_number - 1]
+        if 0 <= line_number < len(code_lines):
+            offending_line = code_lines[line_number]
 
     prompt_parts = [
         "The following PlantUML code failed to render.",
@@ -423,7 +423,7 @@ def _build_repair_prompt(code: str, stderr: str, syntax_hint: str = "") -> str:
         stderr or "",
     ]
     if offending_line:
-        prompt_parts.extend(["", f"Offending line {line_number}: {offending_line}"])
+        prompt_parts.extend(["", f"Offending line: {offending_line}"])
     if syntax_hint:
         prompt_parts.extend(["", syntax_hint])
     prompt_parts.extend(
