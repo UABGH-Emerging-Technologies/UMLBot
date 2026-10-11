@@ -29,6 +29,18 @@ LOGGER = logging.getLogger(__name__)
 # Maximum number of LLM-backed repair attempts after a failed render.
 MAX_REPAIR_ATTEMPTS = 2
 
+# Syntax reminders sent with repair prompts, keyed by diagram mode.
+REPAIR_SYNTAX_HINTS: dict[str, str] = {
+    "gantt": (
+        "PlantUML Gantt rules: wrap in @startgantt/@endgantt; declare tasks as "
+        "`[Task name] as [T1] lasts N days|weeks|months`; aliases are ALWAYS in "
+        "square brackets wherever they appear (`[T1] starts 2027-01-01`, "
+        "`[T2] starts at [T1]'s end`); keep `Project starts YYYY-MM-DD` unbracketed; "
+        "use `printscale`, never `scale <unit>`; milestones are "
+        "`[Label] as [M1] happens at [T1]'s end`."
+    ),
+}
+
 
 @dataclass
 class DiagramGenerationResult:
@@ -292,7 +304,9 @@ class DiagramService:
 
         if not render_ok and llm_succeeded:
             for _attempt in range(MAX_REPAIR_ATTEMPTS):
-                repair_prompt = _build_repair_prompt(current_code, status_msg)
+                repair_prompt = _build_repair_prompt(
+                    current_code, status_msg, REPAIR_SYNTAX_HINTS.get(mode, "")
+                )
                 try:
                     response = handler.llm_interface.invoke(repair_prompt)
                     repaired_code = handler.check_content_type(response)
@@ -380,7 +394,7 @@ def _render_plantuml_jar(
         return None, status_msg, False
 
 
-def _build_repair_prompt(code: str, stderr: str) -> str:
+def _build_repair_prompt(code: str, stderr: str, syntax_hint: str = "") -> str:
     """Build the LLM repair prompt for PlantUML code that failed to render.
 
     PlantUML reports ``ERROR\\n<line>\\n<message>`` where ``<line>`` is the
@@ -410,6 +424,8 @@ def _build_repair_prompt(code: str, stderr: str) -> str:
     ]
     if offending_line:
         prompt_parts.extend(["", f"Offending line {line_number}: {offending_line}"])
+    if syntax_hint:
+        prompt_parts.extend(["", syntax_hint])
     prompt_parts.extend(
         [
             "",

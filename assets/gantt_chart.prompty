@@ -45,6 +45,9 @@ prompt:
     - Use `printscale` for the timeline scale (for example `printscale quarterly`).
       Never use a `scale` directive.
     - Declare tasks as `[Task name] lasts N months`.
+    - Aliases always go in square brackets, both where declared and everywhere they are
+      used: `[Kickoff meeting] as [K1] lasts 1 month`, then `[K1] starts 2027-01-01`.
+      Never write a bare alias such as `as K1` or `K1 starts`.
     - Declare milestones as `[Label] as [M1] happens at [Task]'s end`.
       Do not use `milestone "Label" as M1`.
     - Declare dependencies as `[Task] starts at [Other]'s end`.

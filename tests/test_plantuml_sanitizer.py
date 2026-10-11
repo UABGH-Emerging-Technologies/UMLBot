@@ -49,6 +49,124 @@ class TestGanttFixture:
         assert sanitize_plantuml(GANTT_FIXTURE, "gantt") == GANTT_FIXTURE_EXPECTED
 
 
+# Real production output: aliases declared and used without brackets.
+GANTT_BARE_ALIAS_FIXTURE = """@startgantt
+' High-level Gantt diagram (quarters)
+
+Project starts 2024-01-01
+
+[Q1 2024: Project Kickoff & IRB] as Q1_2024 lasts 3 months
+[Q2 2024: Data Preprocessing] as Q2_2024 lasts 3 months
+Q2_2024 starts 2024-04-01
+
+[Q3 2024: Feature Extraction & Algorithm Development] as Q3_2024 lasts 3 months
+Q3_2024 starts 2024-07-01
+
+[Q4 2024: Internal Validation] as Q4_2024 lasts 3 months
+Q4_2024 starts 2024-10-01
+
+[Q1 2025: Threshold Definition] as Q1_2025 lasts 3 months
+Q1_2025 starts 2025-01-01
+
+[Q2 2025: Early Warning Evaluation] as Q2_2025 lasts 3 months
+Q2_2025 starts 2025-04-01
+
+[Q3 2025: Manuscript Preparation] as Q3_2025 lasts 3 months
+Q3_2025 starts 2025-07-01
+
+[Q4 2025: Dissemination & R01 Planning] as Q4_2025 lasts 3 months
+Q4_2025 starts 2025-10-01
+
+' Dependencies
+Q1_2024 --> Q2_2024
+Q2_2024 --> Q3_2024
+Q3_2024 --> Q4_2024
+Q4_2024 --> Q1_2025
+Q1_2025 --> Q2_2025
+Q2_2025 --> Q3_2025
+Q3_2025 --> Q4_2025
+@endgantt"""
+
+GANTT_BARE_ALIAS_EXPECTED = """@startgantt
+' High-level Gantt diagram (quarters)
+
+Project starts 2024-01-01
+
+[Q1 2024: Project Kickoff & IRB] as [Q1_2024] lasts 3 months
+[Q2 2024: Data Preprocessing] as [Q2_2024] lasts 3 months
+[Q2_2024] starts 2024-04-01
+
+[Q3 2024: Feature Extraction & Algorithm Development] as [Q3_2024] lasts 3 months
+[Q3_2024] starts 2024-07-01
+
+[Q4 2024: Internal Validation] as [Q4_2024] lasts 3 months
+[Q4_2024] starts 2024-10-01
+
+[Q1 2025: Threshold Definition] as [Q1_2025] lasts 3 months
+[Q1_2025] starts 2025-01-01
+
+[Q2 2025: Early Warning Evaluation] as [Q2_2025] lasts 3 months
+[Q2_2025] starts 2025-04-01
+
+[Q3 2025: Manuscript Preparation] as [Q3_2025] lasts 3 months
+[Q3_2025] starts 2025-07-01
+
+[Q4 2025: Dissemination & R01 Planning] as [Q4_2025] lasts 3 months
+[Q4_2025] starts 2025-10-01
+
+' Dependencies
+[Q1_2024] --> [Q2_2024]
+[Q2_2024] --> [Q3_2024]
+[Q3_2024] --> [Q4_2024]
+[Q4_2024] --> [Q1_2025]
+[Q1_2025] --> [Q2_2025]
+[Q2_2025] --> [Q3_2025]
+[Q3_2025] --> [Q4_2025]
+@endgantt"""
+
+
+class TestGanttBareAliases:
+    """Aliases written without ``[...]`` are bracketed everywhere they are used."""
+
+    def test_real_fixture_is_repaired(self) -> None:
+        assert sanitize_plantuml(GANTT_BARE_ALIAS_FIXTURE, "gantt") == GANTT_BARE_ALIAS_EXPECTED
+
+    def test_already_bracketed_alias_unchanged(self) -> None:
+        code = "@startgantt\n[Design] as [D] lasts 2 days\n[E] starts at [D]'s end\n@endgantt"
+        assert sanitize_plantuml(code, "gantt") == code
+
+    def test_alias_word_in_label_title_and_comment_untouched(self) -> None:
+        code = (
+            "@startgantt\ntitle Plan for D\n' D is design\n[Do D work] as D lasts 2 days\n"
+            "[Review] starts at D's end\nD -> [Review]\n@endgantt"
+        )
+        expected = (
+            "@startgantt\ntitle Plan for D\n' D is design\n[Do D work] as [D] lasts 2 days\n"
+            "[Review] starts at [D]'s end\n[D] -> [Review]\n@endgantt"
+        )
+        assert sanitize_plantuml(code, "gantt") == expected
+
+    def test_alias_prefix_does_not_match_longer_alias(self) -> None:
+        code = "@startgantt\n[A] as T1 lasts 1 day\n[B] as T10 lasts 1 day\nT10 starts at T1's end\n@endgantt"
+        expected = (
+            "@startgantt\n[A] as [T1] lasts 1 day\n[B] as [T10] lasts 1 day\n"
+            "[T10] starts at [T1]'s end\n@endgantt"
+        )
+        assert sanitize_plantuml(code, "gantt") == expected
+
+    def test_project_starts_line_untouched(self) -> None:
+        code = "@startgantt\nProject starts 2024-01-01\n[A] as A1 lasts 1 day\n@endgantt"
+        assert "\nProject starts 2024-01-01\n" in sanitize_plantuml(code, "gantt")
+
+    def test_sanitizer_is_idempotent(self) -> None:
+        once = sanitize_plantuml(GANTT_BARE_ALIAS_FIXTURE, "gantt")
+        assert sanitize_plantuml(once, "gantt") == once
+
+    def test_uml_component_alias_untouched(self) -> None:
+        code = "@startuml\n[Comp] as C1\nC1 --> C2\n@enduml"
+        assert sanitize_plantuml(code, "uml") == code
+
+
 class TestGanttDefects:
     """Each defect in the table maps to its expected output."""
 
@@ -159,11 +277,12 @@ class TestOtherModes:
     shutil.which("java") is None or not Path(UMLBotConfig.PLANTUML_JAR_PATH).exists(),
     reason="java or the PlantUML jar is not available",
 )
-def test_sanitized_fixture_renders_with_real_jar() -> None:
+@pytest.mark.parametrize("fixture", [GANTT_FIXTURE, GANTT_BARE_ALIAS_FIXTURE])
+def test_sanitized_fixture_renders_with_real_jar(fixture: str) -> None:
     from UMLBot.services.diagram_service import _render_plantuml_jar
 
     image, _, render_ok = _render_plantuml_jar(
-        plantuml_code=sanitize_plantuml(GANTT_FIXTURE, "gantt"),
+        plantuml_code=sanitize_plantuml(fixture, "gantt"),
         status_msg="test render",
     )
 

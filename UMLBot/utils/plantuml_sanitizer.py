@@ -48,6 +48,9 @@ _QUARTER_DURATION_RE = re.compile(r"\blasts\s+(\d+)\s+quarters?\b", re.IGNORECAS
 # ``milestone "Label" as M1`` -> ``[Label] as [M1]``.
 _MILESTONE_RE = re.compile(r'milestone\s+"([^"]*)"\s+as\s+(\S+)', re.IGNORECASE)
 
+# ``[Label] as T1 ...`` -- an alias declared without brackets.
+_BARE_ALIAS_DECL_RE = re.compile(r"^(\s*\[[^\]]+\]\s+as\s+)([A-Za-z_]\w*)(?=\s|$)")
+
 _START_TAG_RE = re.compile(r"@start\w+")
 _END_TAG_RE = re.compile(r"@end\w+")
 
@@ -84,7 +87,44 @@ def _sanitize_gantt(code: str) -> str:
         line = _QUARTER_DURATION_RE.sub(_months_from_quarters, line)
         line = _MILESTONE_RE.sub(_bracket_milestone, line)
         result.append(line)
-    return "\n".join(result)
+    return "\n".join(_bracket_bare_aliases(result))
+
+
+def _bracket_bare_aliases(lines: list[str]) -> list[str]:
+    """Bracket task aliases declared or referenced without ``[...]``.
+
+    ``[Label] as T1 lasts ...`` becomes ``[Label] as [T1] lasts ...``, and later
+    uses such as ``T1 starts ...`` or ``T1 --> T2`` become ``[T1] starts ...`` and
+    ``[T1] --> [T2]``.  Only aliases declared via ``as`` are touched, only on lines
+    that begin with ``[`` or with such an alias, and never inside an existing
+    ``[...]`` label, so ``Project starts``, titles and comments stay unchanged.
+    """
+    aliases: set[str] = set()
+    declared: list[str] = []
+    for line in lines:
+        match = _BARE_ALIAS_DECL_RE.match(line)
+        if match:
+            aliases.add(match.group(2))
+            line = f"{match.group(1)}[{match.group(2)}]{line[match.end(2):]}"
+        declared.append(line)
+    if not aliases:
+        return declared
+
+    alias_re = re.compile(
+        r"(?<![\w\[])(" + "|".join(re.escape(a) for a in sorted(aliases)) + r")(?![\w\]])"
+    )
+    result: list[str] = []
+    for line in declared:
+        stripped = line.lstrip()
+        first_token = re.match(r"[\w]+", stripped)
+        if stripped.startswith("[") or (first_token and first_token.group(0) in aliases):
+            # Only rewrite text outside existing [...] groups.
+            parts = re.split(r"(\[[^\]]*\])", line)
+            line = "".join(
+                part if part.startswith("[") else alias_re.sub(r"[\1]", part) for part in parts
+            )
+        result.append(line)
+    return result
 
 
 def _fix_wrapper(code: str, kind: str) -> str:

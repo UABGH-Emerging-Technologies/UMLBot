@@ -4,7 +4,11 @@ from unittest.mock import MagicMock, patch
 
 from PIL import Image
 
-from UMLBot.services.diagram_service import DiagramGenerationResult, DiagramService
+from UMLBot.services.diagram_service import (
+    DiagramGenerationResult,
+    DiagramService,
+    _build_repair_prompt,
+)
 
 RENDER_ERROR = "Diagram generated, but rendering failed: ERROR\n3\nSyntax Error? (Assumed diagram type: sequence)"
 
@@ -148,3 +152,15 @@ def test_render_from_code_placeholder_is_not_ok(mock_render: MagicMock) -> None:
 
     assert image is not None
     assert render_ok is False
+
+
+def test_repair_prompt_includes_syntax_hint_when_given() -> None:
+    prompt = _build_repair_prompt(
+        "@startgantt\nX\n@endgantt", "ERROR\n2\nSyntax Error?", "GANTT RULES"
+    )
+    assert "GANTT RULES" in prompt
+
+
+def test_repair_prompt_omits_hint_by_default() -> None:
+    prompt = _build_repair_prompt("@startuml\nX\n@enduml", "ERROR\n2\nSyntax Error?")
+    assert "rules" not in prompt.lower()
