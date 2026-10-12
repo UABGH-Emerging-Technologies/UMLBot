@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
+
 import streamlit as st
 
 # ---------------------------------------------------------------------------
@@ -260,10 +261,11 @@ def api_render(
         data = resp.json()
         return {
             "status": data.get("status", "ok"),
-            "plantuml_code": plantuml_code,
+            "plantuml_code": data.get("plantuml_code") or plantuml_code,
             "image_base64": data.get("image_base64"),
             "image_url": data.get("image_url", ""),
             "message": data.get("message", ""),
+            "plan_warnings": data.get("plan_warnings") or [],
         }
     except requests.exceptions.Timeout:
         return {
@@ -332,7 +334,12 @@ def _build_prompt_description(
     friendly: str = _MODE_FRIENDLY.get(mode, "UML")
 
     code_label: str = (
-        f"Existing PlantUML {friendly} diagram (reuse and refine rather than restart):"
+        "Previous chart (rebuild from the request; keep only task wording the user accepted):"
+        if mode == "gantt"
+        else f"Existing PlantUML {friendly} diagram (reuse and refine rather than restart):"
+    )
+    code_label = (
+        code_label
         if current_code.strip()
         else f"No {friendly} diagram has been created yet. Create a fresh PlantUML {friendly} diagram."
     )
@@ -466,7 +473,11 @@ def _handle_rerender(mode: str) -> None:
     status_key: str = _state_key(mode, "status_message")
     error_key: str = _state_key(mode, "error_message")
 
-    code: str = st.session_state.get(code_key, "")
+    # Read the editor itself: in a button callback the synced copy may lag the edit.
+    code: str = st.session_state.get(
+        _state_key(mode, "code_editor"), st.session_state.get(code_key, "")
+    )
+    st.session_state[code_key] = code
     if not code.strip():
         st.session_state[error_key] = "No PlantUML code to render."
         return
@@ -475,7 +486,12 @@ def _handle_rerender(mode: str) -> None:
         result = api_render(mode=mode, plantuml_code=code)
 
     if result["status"] == "ok" and result["image_base64"]:
+        rendered_code: str = result.get("plantuml_code") or ""
+        if rendered_code and rendered_code != code:
+            st.session_state[code_key] = rendered_code
+            st.session_state[_state_key(mode, "code_editor")] = rendered_code
         st.session_state[img_key] = result["image_base64"]
+        # The server message already includes any plan-check warnings.
         st.session_state[status_key] = result.get("message", "Rendered successfully.")
         st.session_state[error_key] = ""
     else:
@@ -546,9 +562,9 @@ def _render_mode_tab(mode: str, config: Dict[str, Any]) -> None:
 
         btn_col1, btn_col2, btn_col3 = st.columns(3)
         with btn_col1:
-            if st.button("Re-render", key=f"rerender_{mode}"):
-                _handle_rerender(mode)
-                st.rerun()
+            # on_click runs before the page is redrawn, so the handler may update the
+            # editor widget's state (it cannot once the text area exists).
+            st.button("Re-render", key=f"rerender_{mode}", on_click=_handle_rerender, args=(mode,))
         with btn_col2:
             code: str = st.session_state.get(code_key, "")
             if code:
