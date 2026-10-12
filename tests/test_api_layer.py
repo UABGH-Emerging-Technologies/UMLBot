@@ -74,6 +74,7 @@ def test_generate_uml_success(mock_gen: MagicMock, client: TestClient) -> None:
     assert data["status"] == "ok"
     assert data["plantuml_code"].startswith("@startuml")
     assert data["image_base64"] is not None
+    assert data["plan_warnings"] == []
 
 
 def test_generate_uml_missing_auth(client: TestClient) -> None:
@@ -129,12 +130,15 @@ def test_render_uml_success(mock_render: MagicMock, client: TestClient) -> None:
         "Rendered",
         "",
         True,
+        "@startuml\n@enduml",
+        [],
     )
     resp = client.post("/v01/render", json={"plantuml_code": "@startuml\n@enduml"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
     assert data["image_base64"] is not None
+    assert data["plantuml_code"] == "@startuml\n@enduml"
 
 
 def test_render_missing_code(client: TestClient) -> None:
@@ -149,9 +153,32 @@ def test_render_mindmap_no_auth_needed(mock_render: MagicMock, client: TestClien
         "Rendered",
         "",
         True,
+        "@startmindmap\n@endmindmap",
+        [],
     )
     resp = client.post("/v01/mindmap/render", json={"plantuml_code": "@startmindmap\n@endmindmap"})
     assert resp.status_code == 200
+
+
+@patch("UMLBot.services.diagram_service._render_plantuml_jar")
+@patch("UMLBot.services.diagram_service.GanttDraftHandler")
+def test_gantt_render_sanitizes_and_never_calls_llm(
+    mock_handler: MagicMock, mock_render: MagicMock, client: TestClient
+) -> None:
+    mock_render.return_value = (
+        Image.new("RGB", (10, 10), color="white"),
+        "Re-rendered",
+        True,
+    )
+    resp = client.post(
+        "/v01/gantt/render",
+        json={"plantuml_code": "@startgantt\n[Task] lasts 1 quarter\n@endgantt"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "lasts 13 weeks" in data["plantuml_code"]
+    assert data["plan_warnings"]
+    mock_handler.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -168,3 +195,33 @@ def test_config_endpoint(client: TestClient) -> None:
     assert "fallback_templates" in data
     assert len(data["diagram_types"]) == 8
     assert data["default_diagram_type"] == "Use Case"
+
+
+def test_gantt_render_runs_plan_check_once(client: TestClient) -> None:
+    from UMLBot.services import diagram_service as ds
+
+    calls: list[int] = []
+    real_check = ds.check_gantt_plan
+
+    def counting_check(*args: object, **kwargs: object) -> list[str]:
+        calls.append(1)
+        return real_check(*args, **kwargs)
+
+    with (
+        patch.object(ds, "check_gantt_plan", counting_check),
+        patch.object(
+            ds,
+            "_render_plantuml_jar",
+            lambda **_: (Image.new("RGB", (10, 10), "white"), "Rendered", True),
+        ),
+    ):
+        resp = client.post(
+            "/v01/gantt/render",
+            json={
+                "plantuml_code": "@startgantt\n[A task] starts D+0\n[A tsk] ends D+90\n@endgantt"
+            },
+        )
+
+    assert resp.status_code == 200
+    assert len(calls) == 1
+    assert resp.json()["plan_warnings"], "the typo should still be reported"

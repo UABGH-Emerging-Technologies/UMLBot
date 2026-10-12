@@ -7,7 +7,8 @@ import io
 import logging
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 from typing import Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
@@ -22,6 +23,14 @@ from UMLBot.diagram_handlers import (
     UIMockupDraftHandler,
     UMLDraftHandler,
 )
+from UMLBot.utils.gantt_planning import (
+    Quarter,
+    check_gantt_plan,
+    plan_total_days,
+    quarter_table,
+    style_gantt,
+    wants_auto_style,
+)
 from UMLBot.utils.plantuml_sanitizer import sanitize_plantuml
 
 LOGGER = logging.getLogger(__name__)
@@ -29,17 +38,14 @@ LOGGER = logging.getLogger(__name__)
 # Maximum number of LLM-backed repair attempts after a failed render.
 MAX_REPAIR_ATTEMPTS = 2
 
-# Syntax reminders sent with repair prompts, keyed by diagram mode.
-REPAIR_SYNTAX_HINTS: dict[str, str] = {
-    "gantt": (
-        "PlantUML Gantt rules: wrap in @startgantt/@endgantt; declare tasks as "
-        "`[Task name] as [T1] lasts N days|weeks|months`; aliases are ALWAYS in "
-        "square brackets wherever they appear (`[T1] starts 2027-01-01`, "
-        "`[T2] starts at [T1]'s end`); keep `Project starts YYYY-MM-DD` unbracketed; "
-        "use `printscale`, never `scale <unit>`; milestones are "
-        "`[Label] as [M1] happens at [T1]'s end`."
-    ),
-}
+# Gantt syntax reminder sent with repair prompts (other modes send none).
+GANTT_REPAIR_HINT = (
+    "PlantUML Gantt rules: wrap in @startgantt/@endgantt; place every task with "
+    "exactly two lines, `[Task label] starts <start>` and `[Task label] ends <end>`, "
+    "with identical labels; never use `lasts`, aliases (`as [X]`), or invented dates; "
+    "milestones are `[Label] happens at [Task]'s end`; no arrows unless requested; "
+    "do not write printscale/zoom/hide/colour lines."
+)
 
 
 @dataclass
@@ -51,6 +57,7 @@ class DiagramGenerationResult:
     status_message: str
     image_url: str
     render_ok: bool = False
+    plan_warnings: list[str] = field(default_factory=list)
 
 
 class DiagramService:
@@ -226,13 +233,23 @@ class DiagramService:
 
     def render_diagram_from_code(
         self, plantuml_code: str, mode: str = "uml"
-    ) -> Tuple[Image.Image, str, str, bool]:
+    ) -> Tuple[Image.Image, str, str, bool, str, list[str]]:
         """Re-render an already generated PlantUML snippet via the local JAR.
 
-        Returns a placeholder image if the render fails so the UI can continue gracefully.
-        The final value reports whether the JAR rendered successfully.
+        Returns a placeholder image if the render fails so the UI can continue
+        gracefully.  The fourth value reports whether the JAR rendered
+        successfully; the fifth is the sanitized code that was actually rendered;
+        the sixth lists Gantt plan-check warnings (empty for other modes).
         """
         sanitized_code = sanitize_plantuml(plantuml_code, mode)
+        # Hand-edited code is rendered as written unless it opts in to styling.
+        if mode == "gantt" and wants_auto_style(sanitized_code):
+            sanitized_code = style_gantt(
+                sanitized_code,
+                dated=_infer_gantt_plan_from_code(sanitized_code)[0] is not None,
+                total_days=plan_total_days(sanitized_code),
+                preserve_user_choices=True,
+            )
         pil_image, status_msg, render_ok = _render_plantuml_jar(
             plantuml_code=sanitized_code,
             status_msg="Re-rendered from PlantUML code.",
@@ -240,7 +257,14 @@ class DiagramService:
         if pil_image is None:
             pil_image = _create_placeholder_image("Diagram preview unavailable")
             render_ok = False
-        return pil_image, status_msg, "", render_ok
+        problems: list[str] = []
+        if mode == "gantt":
+            start, quarters = _infer_gantt_plan_from_code(sanitized_code)
+            problems = check_gantt_plan(sanitized_code, start, quarters, None, check_dates=False)
+            if problems:
+                warning = "Plan check: " + "; ".join(problems)
+                status_msg = f"{status_msg} | {warning}" if status_msg else warning
+        return pil_image, status_msg, "", render_ok, sanitized_code, problems
 
     def diagram_image_to_base64(self, image: Image.Image | None) -> Optional[str]:
         """Encode a PIL image to a base64 PNG string."""
@@ -293,20 +317,55 @@ class DiagramService:
             base_status = f"LLM error: {exc}. Showing fallback stub."
             llm_succeeded = False
 
+        plan_start = getattr(handler, "plan_start", None)
+        plan_quarters = getattr(handler, "plan_quarters", None)
+        plan_max_quarters = getattr(handler, "plan_max_quarters", None)
+        plan_detailed = bool(getattr(handler, "plan_detailed", False))
+        max_tasks = None if plan_detailed else 10
+
         current_code = sanitize_plantuml(
             _normalize_curly_braces(_strip_code_block_markers(plantuml_code)),
             mode,
         )
+        if mode == "gantt":
+            current_code = style_gantt(
+                current_code,
+                dated=plan_start is not None,
+                total_days=plan_total_days(current_code),
+            )
         pil_image, status_msg, render_ok = _render_plantuml_jar(
             plantuml_code=current_code,
             status_msg=base_status,
         )
 
-        if not render_ok and llm_succeeded:
+        plan_problems: list[str] = []
+        if mode == "gantt" and render_ok:
+            plan_problems = check_gantt_plan(
+                current_code,
+                plan_start,
+                plan_quarters,
+                plan_max_quarters,
+                max_tasks=max_tasks,
+            )
+
+        if (not render_ok or plan_problems) and llm_succeeded:
             for _attempt in range(MAX_REPAIR_ATTEMPTS):
-                repair_prompt = _build_repair_prompt(
-                    current_code, status_msg, REPAIR_SYNTAX_HINTS.get(mode, "")
+                if plan_problems:
+                    stderr_text = "PLAN CHECK FAILED:\n" + "\n".join(
+                        f"- {problem}" for problem in plan_problems
+                    )
+                    if any("Plan runs past" in problem for problem in plan_problems):
+                        stderr_text += (
+                            "\nOverlap independent work and shorten tasks; run "
+                            "secondary analyses alongside the main analysis rather "
+                            "than after it."
+                        )
+                else:
+                    stderr_text = status_msg
+                syntax_hint = (
+                    _gantt_syntax_hint(plan_start, plan_quarters) if mode == "gantt" else ""
                 )
+                repair_prompt = _build_repair_prompt(current_code, stderr_text, syntax_hint)
                 try:
                     response = handler.llm_interface.invoke(repair_prompt)
                     repaired_code = handler.check_content_type(response)
@@ -317,12 +376,31 @@ class DiagramService:
                     _normalize_curly_braces(_strip_code_block_markers(repaired_code)),
                     mode,
                 )
+                if mode == "gantt":
+                    current_code = style_gantt(
+                        current_code,
+                        dated=plan_start is not None,
+                        total_days=plan_total_days(current_code),
+                    )
                 pil_image, status_msg, render_ok = _render_plantuml_jar(
                     plantuml_code=current_code,
                     status_msg=base_status,
                 )
-                if render_ok:
+                plan_problems = []
+                if mode == "gantt" and render_ok:
+                    plan_problems = check_gantt_plan(
+                        current_code,
+                        plan_start,
+                        plan_quarters,
+                        plan_max_quarters,
+                        max_tasks=max_tasks,
+                    )
+                if render_ok and not plan_problems:
                     break
+
+        if plan_problems:
+            warning = "Plan check: " + "; ".join(plan_problems)
+            status_msg = f"{status_msg} | {warning}" if status_msg else warning
 
         return DiagramGenerationResult(
             plantuml_code=current_code,
@@ -330,6 +408,7 @@ class DiagramService:
             status_message=status_msg,
             image_url="",
             render_ok=render_ok,
+            plan_warnings=plan_problems,
         )
 
 
@@ -392,6 +471,28 @@ def _render_plantuml_jar(
         else:
             status_msg = failure_msg
         return None, status_msg, False
+
+
+def _gantt_syntax_hint(start: date | None, quarters: list[Quarter] | None) -> str:
+    """Return a mode-aware Gantt repair hint listing allowed dates or D+N offsets."""
+    base = GANTT_REPAIR_HINT
+    if start is not None and quarters:
+        allowed = sorted({value for quarter in quarters for value in (quarter.start, quarter.end)})
+        dates = ", ".join(value.isoformat() for value in allowed)
+        return f"{base} Dated mode: use only these dates, copied exactly: {dates}."
+    return f"{base} No calendar dates; use D+N offsets (D+0 is the first day)."
+
+
+def _infer_gantt_plan_from_code(code: str) -> tuple[date | None, list[Quarter] | None]:
+    """Infer the start date and quarter table from a rendered Gantt snippet."""
+    match = re.search(r"Project starts\s+(\d{4}-\d{2}-\d{2})", code)
+    if match is None:
+        return None, None
+    try:
+        start = date.fromisoformat(match.group(1))
+    except ValueError:
+        return None, None
+    return start, quarter_table(start)
 
 
 def _build_repair_prompt(code: str, stderr: str, syntax_hint: str = "") -> str:

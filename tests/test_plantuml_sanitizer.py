@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from UMLBot.config.config import UMLBotConfig
+from UMLBot.utils.gantt_planning import plan_total_days, style_gantt
 from UMLBot.utils.plantuml_sanitizer import sanitize_plantuml
 
 GANTT_FIXTURE = """@startuml
@@ -33,9 +34,9 @@ Project starts 2027-01-01
 printscale quarterly
 title High-Level Gantt: SAH Brain-Heart Coupling Index (BHCI) R21
 
-[Project setup & data harmonization] as [Setup] lasts 3 months
-[Signal preprocessing & quality control] as [Preprocess] lasts 6 months
-[Lock BHCI formulation] as [Lock] lasts 3 months
+[Project setup & data harmonization] as [Setup] lasts 13 weeks
+[Signal preprocessing & quality control] as [Preprocess] lasts 26 weeks
+[Lock BHCI formulation] as [Lock] lasts 13 weeks
 [Setup] starts 2027-01-01
 [Preprocess] starts at [Setup]'s end
 [Lock] starts at [Preprocess]'s end
@@ -206,9 +207,9 @@ class TestGanttSectionsAndScales:
         code = "@startgantt\nprintscale daily zoom 2\n[A] lasts 1 day\n@endgantt"
         assert sanitize_plantuml(code, "gantt") == code
 
-    def test_year_duration_becomes_months(self) -> None:
+    def test_year_duration_becomes_weeks(self) -> None:
         code = "@startgantt\n[A] lasts 1 year\n[B] lasts 2 years\n@endgantt"
-        expected = "@startgantt\n[A] lasts 12 months\n[B] lasts 24 months\n@endgantt"
+        expected = "@startgantt\n[A] lasts 52 weeks\n[B] lasts 104 weeks\n@endgantt"
         assert sanitize_plantuml(code, "gantt") == expected
 
     def test_section_word_in_label_untouched(self) -> None:
@@ -239,13 +240,13 @@ class TestGanttDefects:
         code = "@startgantt\nGANTT\n[Task] lasts 1 day\n@endgantt"
         assert sanitize_plantuml(code, "gantt") == "@startgantt\n[Task] lasts 1 day\n@endgantt"
 
-    def test_quarter_duration_becomes_months(self) -> None:
+    def test_quarter_duration_becomes_weeks(self) -> None:
         code = "@startgantt\n[Task] lasts 1 quarter\n@endgantt"
-        assert sanitize_plantuml(code, "gantt") == "@startgantt\n[Task] lasts 3 months\n@endgantt"
+        assert sanitize_plantuml(code, "gantt") == "@startgantt\n[Task] lasts 13 weeks\n@endgantt"
 
-    def test_plural_quarter_duration_becomes_months(self) -> None:
+    def test_plural_quarter_duration_becomes_weeks(self) -> None:
         code = "@startgantt\n[Task] lasts 2 quarters\n@endgantt"
-        assert sanitize_plantuml(code, "gantt") == "@startgantt\n[Task] lasts 6 months\n@endgantt"
+        assert sanitize_plantuml(code, "gantt") == "@startgantt\n[Task] lasts 26 weeks\n@endgantt"
 
     def test_scale_unit_line_removed(self) -> None:
         code = "@startgantt\nscale quarterly\n[Task] lasts 1 day\n@endgantt"
@@ -330,18 +331,78 @@ class TestOtherModes:
         assert sanitize_plantuml(code, "mystery") == code
 
 
+GANTT_UNDATED_FIXTURE = """@startgantt
+printscale weekly with week numbering from 1 zoom 0.5
+title T (timeline in project weeks; 13 weeks = 1 quarter)
+-- Aim 1 --
+[A task] starts D+0
+[A task] ends D+181
+[B task] starts D+182
+[B task] ends D+272
+-- Aim 2 --
+[C task] starts D+91
+[C task] ends D+272
+[A task] -> [B task]
+[M done] happens at [B task]'s end
+@endgantt"""
+
+GANTT_DATED_FIXTURE = """@startgantt
+Project starts 2027-07-01
+printscale quarterly
+[A] starts 2027-07-01
+[A] ends 2027-12-31
+[B] starts 2028-01-01
+[B] ends 2028-06-30
+[C] starts 2027-10-01
+[C] ends 2028-03-31
+[A] -> [B]
+[C] -> [B]
+@endgantt"""
+
+
 @pytest.mark.skipif(
     shutil.which("java") is None or not Path(UMLBotConfig.PLANTUML_JAR_PATH).exists(),
     reason="java or the PlantUML jar is not available",
 )
 @pytest.mark.parametrize(
-    "fixture", [GANTT_FIXTURE, GANTT_BARE_ALIAS_FIXTURE, GANTT_SECTION_FIXTURE]
+    "fixture",
+    [
+        GANTT_FIXTURE,
+        GANTT_BARE_ALIAS_FIXTURE,
+        GANTT_SECTION_FIXTURE,
+        GANTT_UNDATED_FIXTURE,
+        GANTT_DATED_FIXTURE,
+    ],
 )
 def test_sanitized_fixture_renders_with_real_jar(fixture: str) -> None:
     from UMLBot.services.diagram_service import _render_plantuml_jar
 
     image, _, render_ok = _render_plantuml_jar(
         plantuml_code=sanitize_plantuml(fixture, "gantt"),
+        status_msg="test render",
+    )
+
+    assert render_ok is True
+    assert image is not None
+
+
+@pytest.mark.skipif(
+    shutil.which("java") is None or not Path(UMLBotConfig.PLANTUML_JAR_PATH).exists(),
+    reason="java or the PlantUML jar is not available",
+)
+@pytest.mark.parametrize(
+    ("fixture", "dated"),
+    [
+        (GANTT_UNDATED_FIXTURE, False),
+        (GANTT_DATED_FIXTURE, True),
+    ],
+)
+def test_styled_fixture_renders_with_real_jar(fixture: str, dated: bool) -> None:
+    from UMLBot.services.diagram_service import _render_plantuml_jar
+
+    styled = style_gantt(fixture, dated=dated, total_days=plan_total_days(fixture))
+    image, _, render_ok = _render_plantuml_jar(
+        plantuml_code=styled,
         status_msg="test render",
     )
 

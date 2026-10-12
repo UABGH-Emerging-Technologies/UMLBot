@@ -375,7 +375,7 @@ with gr.Blocks(title="UML Diagram Generator") as demo:
         Does not change the code box content.
         Only the CURRENT code box value is used to generate the diagram image.
         """
-        pil_image, status_msg, _, _ = diagram_service.render_diagram_from_code(plantuml_code_text)
+        pil_image, status_msg, *_ = diagram_service.render_diagram_from_code(plantuml_code_text)
         return pil_image, status_msg
 
     # --- Chat-based UML revision workflow with error handling ---
