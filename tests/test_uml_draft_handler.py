@@ -103,3 +103,27 @@ def test_construct_prompt_escapes_curly_braces(monkeypatch):
     assert "{{" in prompt and "}}" in prompt
     # The PlantUML block should still be present in the output
     assert "skinparam" in prompt
+
+
+def _gantt_prompt_text(handler, description):
+    prompt = handler.construct_prompt("gantt", description, None)
+    if hasattr(prompt, "to_string"):
+        return prompt.to_string()
+    return str(prompt)
+
+
+def test_gantt_construct_prompt_dated_contains_quarter_table():
+    from UMLBot.diagram_handlers.gantt_draft_handler import GanttDraftHandler
+
+    handler = GanttDraftHandler(config=UMLBotConfig())
+    text = _gantt_prompt_text(handler, "Plan starting July 2027 with several aims")
+    assert "Y1Q1: 2027-07-01 to 2027-09-30" in text
+
+
+def test_gantt_construct_prompt_undated_has_no_quarter_table():
+    from UMLBot.diagram_handlers.gantt_draft_handler import GanttDraftHandler
+
+    handler = GanttDraftHandler(config=UMLBotConfig())
+    text = _gantt_prompt_text(handler, "A plan with no dates at all")
+    assert "Do not invent one" in text
+    assert "Quarter table" not in text
