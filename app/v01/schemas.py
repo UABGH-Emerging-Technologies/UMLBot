@@ -62,15 +62,20 @@ class DiagramResponse(BaseModel):
     image_base64: Optional[str] = None
     image_url: str = ""
     message: str = ""
+    render_ok: bool = False
+    plan_warnings: List[str] = Field(default_factory=list)
 
 
 class RenderResponse(BaseModel):
     """Response body for render endpoints."""
 
     status: ResponseStatus
+    plantuml_code: str = ""
     image_base64: Optional[str] = None
     image_url: str = ""
     message: str = ""
+    render_ok: bool = False
+    plan_warnings: List[str] = Field(default_factory=list)
 
 
 class ConfigResponse(BaseModel):

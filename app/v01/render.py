@@ -19,16 +19,22 @@ router = APIRouter(tags=["render"])
 def _render_and_respond(
     body: RenderRequest,
     service: DiagramService,
+    mode: str,
 ) -> RenderResponse | JSONResponse:
     """Shared logic for all render endpoints."""
     try:
-        pil_image, status_msg, image_url = service.render_diagram_from_code(body.plantuml_code)
+        pil_image, status_msg, image_url, render_ok, rendered_code, plan_warnings = (
+            service.render_diagram_from_code(body.plantuml_code, mode)
+        )
         image_base64 = service.diagram_image_to_base64(pil_image)
         return RenderResponse(
             status=ResponseStatus.ok,
+            plantuml_code=rendered_code,
             image_base64=image_base64,
             image_url=image_url,
             message=status_msg,
+            render_ok=render_ok,
+            plan_warnings=plan_warnings,
         )
     except Exception:
         LOGGER.exception("Render failed")
@@ -44,7 +50,7 @@ async def render_uml(
     service: DiagramService = Depends(get_diagram_service),
 ) -> RenderResponse | JSONResponse:
     """Render PlantUML code to an image."""
-    return _render_and_respond(body, service)
+    return _render_and_respond(body, service, "uml")
 
 
 @router.post("/mindmap/render", response_model=RenderResponse)
@@ -53,7 +59,7 @@ async def render_mindmap(
     service: DiagramService = Depends(get_diagram_service),
 ) -> RenderResponse | JSONResponse:
     """Render PlantUML mindmap code to an image."""
-    return _render_and_respond(body, service)
+    return _render_and_respond(body, service, "mindmap")
 
 
 @router.post("/ui-mockup/render", response_model=RenderResponse)
@@ -62,7 +68,7 @@ async def render_ui_mockup(
     service: DiagramService = Depends(get_diagram_service),
 ) -> RenderResponse | JSONResponse:
     """Render PlantUML SALT code to an image."""
-    return _render_and_respond(body, service)
+    return _render_and_respond(body, service, "ui_mockup")
 
 
 @router.post("/gantt/render", response_model=RenderResponse)
@@ -71,7 +77,7 @@ async def render_gantt(
     service: DiagramService = Depends(get_diagram_service),
 ) -> RenderResponse | JSONResponse:
     """Render PlantUML Gantt code to an image."""
-    return _render_and_respond(body, service)
+    return _render_and_respond(body, service, "gantt")
 
 
 @router.post("/erd/render", response_model=RenderResponse)
@@ -80,7 +86,7 @@ async def render_erd(
     service: DiagramService = Depends(get_diagram_service),
 ) -> RenderResponse | JSONResponse:
     """Render PlantUML ER diagram code to an image."""
-    return _render_and_respond(body, service)
+    return _render_and_respond(body, service, "erd")
 
 
 @router.post("/json/render", response_model=RenderResponse)
@@ -89,7 +95,7 @@ async def render_json(
     service: DiagramService = Depends(get_diagram_service),
 ) -> RenderResponse | JSONResponse:
     """Render PlantUML JSON code to an image."""
-    return _render_and_respond(body, service)
+    return _render_and_respond(body, service, "json")
 
 
 @router.post("/c4/render", response_model=RenderResponse)
@@ -98,4 +104,4 @@ async def render_c4(
     service: DiagramService = Depends(get_diagram_service),
 ) -> RenderResponse | JSONResponse:
     """Render PlantUML C4 code to an image."""
-    return _render_and_respond(body, service)
+    return _render_and_respond(body, service, "c4")
