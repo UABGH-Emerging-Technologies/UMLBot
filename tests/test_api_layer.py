@@ -1,5 +1,6 @@
 """Tests for the v01 FastAPI API layer."""
 
+import base64
 import os
 from unittest.mock import MagicMock, patch
 
@@ -10,7 +11,7 @@ from PIL import Image
 os.environ.setdefault("azure_proxy_key", "test-key")
 
 from app.server import app
-from UMLBot.services.diagram_service import DiagramGenerationResult
+from UMLBot.services.diagram_service import DiagramGenerationResult, _render_plantuml_jar
 
 
 @pytest.fixture
@@ -195,6 +196,92 @@ def test_config_endpoint(client: TestClient) -> None:
     assert "fallback_templates" in data
     assert len(data["diagram_types"]) == 8
     assert data["default_diagram_type"] == "Use Case"
+
+
+# ---------------------------------------------------------------------------
+# SVG output tests
+# ---------------------------------------------------------------------------
+
+
+@patch("UMLBot.services.diagram_service.DiagramService.render_diagram_from_code")
+def test_render_svg_success(mock_render: MagicMock, client: TestClient) -> None:
+    mock_render.return_value = (
+        "<svg xmlns='http://www.w3.org/2000/svg'><rect/></svg>",
+        "Rendered",
+        "",
+        True,
+        "@startuml\n@enduml",
+        [],
+    )
+    resp = client.post(
+        "/v01/render",
+        json={"plantuml_code": "@startuml\n@enduml", "format": "svg"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["image_base64"] is None
+    assert data["svg_base64"] is not None
+    decoded = base64.b64decode(data["svg_base64"])
+    assert decoded.startswith(b"<?xml") or decoded.startswith(b"<svg")
+
+
+def test_render_invalid_format(client: TestClient) -> None:
+    resp = client.post(
+        "/v01/render",
+        json={"plantuml_code": "@startuml\n@enduml", "format": "pdf"},
+    )
+    assert resp.status_code == 422
+
+
+@patch("UMLBot.services.diagram_service.DiagramService.generate_diagram_from_description")
+def test_generate_svg_success(mock_gen: MagicMock, client: TestClient) -> None:
+    mock_gen.return_value = DiagramGenerationResult(
+        plantuml_code="@startuml\n@enduml",
+        pil_image=None,
+        status_message="ok",
+        image_url="",
+        svg_text="<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+    )
+    resp = client.post(
+        "/v01/generate",
+        json={**UML_GENERATE_BODY, "format": "svg"},
+        headers=AUTH_HEADER,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["image_base64"] is None
+    assert data["svg_base64"] is not None
+
+
+@patch("UMLBot.services.diagram_service.DiagramService.render_diagram_from_code")
+def test_render_default_format_is_png(mock_render: MagicMock, client: TestClient) -> None:
+    mock_render.return_value = (
+        Image.new("RGB", (10, 10), color="white"),
+        "Rendered",
+        "",
+        True,
+        "@startuml\n@enduml",
+        [],
+    )
+    resp = client.post("/v01/render", json={"plantuml_code": "@startuml\n@enduml"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["image_base64"] is not None
+    assert data["svg_base64"] is None
+
+
+@patch("UMLBot.services.diagram_service.Image.open")
+@patch("UMLBot.services.diagram_service.subprocess.run")
+def test_render_plantuml_jar_svg(mock_run: MagicMock, mock_image_open: MagicMock) -> None:
+    mock_run.return_value = MagicMock(returncode=0, stdout=b"<svg/>")
+    svg_text, status_msg, render_ok = _render_plantuml_jar("test", "msg", fmt="svg")
+    assert svg_text == "<svg/>"
+    assert isinstance(svg_text, str)
+    assert status_msg == "msg"
+    assert render_ok is True
+    argv = mock_run.call_args[0][0]
+    assert "-tsvg" in argv
+    mock_image_open.assert_not_called()
 
 
 def test_gantt_render_runs_plan_check_once(client: TestClient) -> None:
