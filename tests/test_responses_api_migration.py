@@ -69,7 +69,7 @@ class TestResponsesApiWiring:
     def test_gpt5_model_sets_responses_api_flag(self, mock_render: MagicMock) -> None:
         from UMLBot.services.diagram_service import DiagramService
 
-        mock_render.return_value = (None, "rendered")
+        mock_render.return_value = (None, "rendered", True)
         service = DiagramService()
 
         handler = MagicMock()
@@ -96,7 +96,7 @@ class TestResponsesApiWiring:
     def test_gpt4o_model_does_not_set_responses_api_flag(self, mock_render: MagicMock) -> None:
         from UMLBot.services.diagram_service import DiagramService
 
-        mock_render.return_value = (None, "rendered")
+        mock_render.return_value = (None, "rendered", True)
         service = DiagramService()
 
         handler = MagicMock()

@@ -145,6 +145,9 @@ def _handle_chat_input(mode: str, user_message: str) -> None:
         history.append({"role": "assistant", "content": f"Error: {error}"})
     elif result and result.get("status") == "ok":
         st.session_state[code_key] = result.get("plantuml_code", current_code)
+        # A keyed text_area ignores later ``value=`` changes, so write the new
+        # code into the editor's own state for it to show up.
+        st.session_state[_state_key(mode, "code_editor")] = st.session_state[code_key]
         st.session_state[img_key] = result.get("image_base64")
         message = result.get("message", "Diagram generated.")
         st.session_state[status_key] = message
@@ -165,7 +168,9 @@ def _handle_rerender(mode: str) -> None:
     status_key = _state_key(mode, "status_message")
     error_key = _state_key(mode, "error_message")
 
-    code = st.session_state.get(code_key, "")
+    # Read the editor itself: in a button callback the synced copy may lag the edit.
+    code = st.session_state.get(_state_key(mode, "code_editor"), st.session_state.get(code_key, ""))
+    st.session_state[code_key] = code
     if not code.strip():
         st.session_state[error_key] = "No PlantUML code to render."
         st.session_state[status_key] = ""
@@ -178,7 +183,12 @@ def _handle_rerender(mode: str) -> None:
         st.session_state[error_key] = error
         st.session_state[status_key] = ""
     elif result and result.get("status") == "ok" and result.get("image_base64"):
+        rendered_code = result.get("plantuml_code") or ""
+        if rendered_code and rendered_code != code:
+            st.session_state[code_key] = rendered_code
+            st.session_state[_state_key(mode, "code_editor")] = rendered_code
         st.session_state[img_key] = result.get("image_base64")
+        # The server message already includes any plan-check warnings.
         st.session_state[status_key] = result.get("message", "Rendered successfully.")
         st.session_state[error_key] = ""
     else:
@@ -333,9 +343,8 @@ def _render_mode_tab(mode: str) -> None:
     with st.expander("Diagram code", expanded=False):
         new_code = st.text_area(
             "Edit diagram text",
-            value=st.session_state.get(code_key, ""),
             height=300,
-            key=f"code_editor_{mode}",
+            key=_state_key(mode, "code_editor"),
             label_visibility="collapsed",
         )
         if new_code != st.session_state.get(code_key, ""):
@@ -343,9 +352,11 @@ def _render_mode_tab(mode: str) -> None:
 
         btn_col1, btn_col2, btn_col3 = st.columns(3)
         with btn_col1:
-            if st.button("Refresh preview", key=f"rerender_{mode}"):
-                _handle_rerender(mode)
-                st.rerun()
+            # on_click runs before the page is redrawn, so the handler may update the
+            # editor widget's state (it cannot once the text area exists).
+            st.button(
+                "Refresh preview", key=f"rerender_{mode}", on_click=_handle_rerender, args=(mode,)
+            )
         with btn_col2:
             code = st.session_state.get(code_key, "")
             if code:

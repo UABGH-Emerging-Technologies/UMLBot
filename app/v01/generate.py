@@ -66,6 +66,8 @@ def _generate_and_respond(
         image_url=result.image_url,
         message=result.status_message,
         svg_base64=svg_base64,
+        render_ok=result.render_ok,
+        plan_warnings=result.plan_warnings,
     )
 
 

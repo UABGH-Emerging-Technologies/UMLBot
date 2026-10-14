@@ -75,6 +75,7 @@ def test_generate_uml_success(mock_gen: MagicMock, client: TestClient) -> None:
     assert data["status"] == "ok"
     assert data["plantuml_code"].startswith("@startuml")
     assert data["image_base64"] is not None
+    assert data["plan_warnings"] == []
 
 
 def test_generate_uml_missing_auth(client: TestClient) -> None:
@@ -129,12 +130,16 @@ def test_render_uml_success(mock_render: MagicMock, client: TestClient) -> None:
         Image.new("RGB", (10, 10), color="white"),
         "Rendered",
         "",
+        True,
+        "@startuml\n@enduml",
+        [],
     )
     resp = client.post("/v01/render", json={"plantuml_code": "@startuml\n@enduml"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
     assert data["image_base64"] is not None
+    assert data["plantuml_code"] == "@startuml\n@enduml"
 
 
 def test_render_missing_code(client: TestClient) -> None:
@@ -148,9 +153,33 @@ def test_render_mindmap_no_auth_needed(mock_render: MagicMock, client: TestClien
         Image.new("RGB", (10, 10), color="white"),
         "Rendered",
         "",
+        True,
+        "@startmindmap\n@endmindmap",
+        [],
     )
     resp = client.post("/v01/mindmap/render", json={"plantuml_code": "@startmindmap\n@endmindmap"})
     assert resp.status_code == 200
+
+
+@patch("UMLBot.services.diagram_service._render_plantuml_jar")
+@patch("UMLBot.services.diagram_service.GanttDraftHandler")
+def test_gantt_render_sanitizes_and_never_calls_llm(
+    mock_handler: MagicMock, mock_render: MagicMock, client: TestClient
+) -> None:
+    mock_render.return_value = (
+        Image.new("RGB", (10, 10), color="white"),
+        "Re-rendered",
+        True,
+    )
+    resp = client.post(
+        "/v01/gantt/render",
+        json={"plantuml_code": "@startgantt\n[Task] lasts 1 quarter\n@endgantt"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "lasts 13 weeks" in data["plantuml_code"]
+    assert data["plan_warnings"]
+    mock_handler.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +209,9 @@ def test_render_svg_success(mock_render: MagicMock, client: TestClient) -> None:
         "<svg xmlns='http://www.w3.org/2000/svg'><rect/></svg>",
         "Rendered",
         "",
+        True,
+        "@startuml\n@enduml",
+        [],
     )
     resp = client.post(
         "/v01/render",
@@ -227,6 +259,9 @@ def test_render_default_format_is_png(mock_render: MagicMock, client: TestClient
         Image.new("RGB", (10, 10), color="white"),
         "Rendered",
         "",
+        True,
+        "@startuml\n@enduml",
+        [],
     )
     resp = client.post("/v01/render", json={"plantuml_code": "@startuml\n@enduml"})
     assert resp.status_code == 200
@@ -239,10 +274,41 @@ def test_render_default_format_is_png(mock_render: MagicMock, client: TestClient
 @patch("UMLBot.services.diagram_service.subprocess.run")
 def test_render_plantuml_jar_svg(mock_run: MagicMock, mock_image_open: MagicMock) -> None:
     mock_run.return_value = MagicMock(returncode=0, stdout=b"<svg/>")
-    svg_text, status_msg = _render_plantuml_jar("test", "msg", fmt="svg")
+    svg_text, status_msg, render_ok = _render_plantuml_jar("test", "msg", fmt="svg")
     assert svg_text == "<svg/>"
     assert isinstance(svg_text, str)
     assert status_msg == "msg"
+    assert render_ok is True
     argv = mock_run.call_args[0][0]
     assert "-tsvg" in argv
     mock_image_open.assert_not_called()
+
+
+def test_gantt_render_runs_plan_check_once(client: TestClient) -> None:
+    from UMLBot.services import diagram_service as ds
+
+    calls: list[int] = []
+    real_check = ds.check_gantt_plan
+
+    def counting_check(*args: object, **kwargs: object) -> list[str]:
+        calls.append(1)
+        return real_check(*args, **kwargs)
+
+    with (
+        patch.object(ds, "check_gantt_plan", counting_check),
+        patch.object(
+            ds,
+            "_render_plantuml_jar",
+            lambda **_: (Image.new("RGB", (10, 10), "white"), "Rendered", True),
+        ),
+    ):
+        resp = client.post(
+            "/v01/gantt/render",
+            json={
+                "plantuml_code": "@startgantt\n[A task] starts D+0\n[A tsk] ends D+90\n@endgantt"
+            },
+        )
+
+    assert resp.status_code == 200
+    assert len(calls) == 1
+    assert resp.json()["plan_warnings"], "the typo should still be reported"

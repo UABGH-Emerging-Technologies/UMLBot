@@ -150,9 +150,16 @@ def build_prompt_description(
     sections.append(f"Latest user request:\n{user_request}")
 
     if current_code.strip():
-        sections.append(
-            f"Existing PlantUML {friendly} diagram (reuse and refine rather than restart):\n{current_code}"
-        )
+        if mode == "gantt":
+            existing_label = (
+                "Previous chart (rebuild from the request; "
+                "keep only task wording the user accepted)"
+            )
+        else:
+            existing_label = (
+                f"Existing PlantUML {friendly} diagram (reuse and refine rather than restart)"
+            )
+        sections.append(f"{existing_label}:\n{current_code}")
     else:
         sections.append(
             f"No {friendly} diagram has been created yet. Create a fresh PlantUML {friendly} diagram."
@@ -208,6 +215,6 @@ def render_diagram(
         )
         resp.raise_for_status()
         data = resp.json()
-        return {**data, "plantuml_code": plantuml_code}, None
+        return {**data, "plantuml_code": data.get("plantuml_code") or plantuml_code}, None
     except Exception as exc:
         return None, f"API error: {exc}"

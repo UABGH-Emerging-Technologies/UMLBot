@@ -359,6 +359,26 @@ class TestApiRender:
         assert "Cannot connect" in result["message"]
 
     @patch("streamlit_app.requests.post")
+    def test_server_code_wins(self, mock_post: MagicMock) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "status": "ok",
+            "plantuml_code": "@startgantt\n[Task] lasts 13 weeks\n@endgantt",
+            "image_base64": "rendered_img",
+            "image_url": "",
+            "message": "Rendered",
+            "plan_warnings": ["Task 'Task' has an end but no start"],
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_post.return_value = mock_resp
+
+        result = api_render("gantt", "@startgantt\n[Task] lasts 1 quarter\n@endgantt")
+
+        assert result["plantuml_code"] == "@startgantt\n[Task] lasts 13 weeks\n@endgantt"
+        assert result["plan_warnings"] == ["Task 'Task' has an end but no start"]
+
+    @patch("streamlit_app.requests.post")
     def test_uses_correct_render_endpoint(self, mock_post: MagicMock) -> None:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"status": "ok"}
