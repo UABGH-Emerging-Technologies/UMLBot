@@ -376,13 +376,13 @@ class TestPlanTotalDays:
 class TestStyleGanttScale:
     """The axis directive is chosen from the chart's dating and span."""
 
-    def test_dated_short_plan_uses_monthly(self) -> None:
+    def test_dated_short_plan_uses_weekly(self) -> None:
         code = (
             "@startgantt\nProject starts 2027-07-01\n"
             "[A] starts 2027-07-01\n[A] ends 2027-09-30\n@endgantt"
         )
         styled = style_gantt(code, dated=True, total_days=plan_total_days(code))
-        assert "printscale monthly" in styled
+        assert "printscale weekly zoom 2" in styled
         assert "printscale quarterly" not in styled
 
     def test_dated_long_plan_uses_quarterly(self) -> None:
@@ -391,13 +391,21 @@ class TestStyleGanttScale:
             "[A] starts 2027-07-01\n[A] ends 2029-06-30\n@endgantt"
         )
         styled = style_gantt(code, dated=True, total_days=plan_total_days(code))
-        assert "printscale quarterly" in styled
+        assert "printscale quarterly zoom 2" in styled
 
     def test_undated_plan_uses_weekly_axis(self) -> None:
         code = "@startgantt\n[A] starts D+0\n[A] ends D+90\n@endgantt"
         styled = style_gantt(code, dated=False, total_days=plan_total_days(code))
-        assert "printscale weekly with week numbering from 1 zoom 0.5" in styled
+        assert "printscale weekly with week numbering from 1 zoom 2" in styled
         assert "zoom 0.25" not in styled
+
+    def test_undated_long_plan_never_uses_calendar_scale(self) -> None:
+        # Undated, PlantUML draws monthly/quarterly as one column per day, which
+        # is a solid grey block for a two-year plan; a numbered weekly axis is used.
+        code = "@startgantt\n[A] starts D+0\n[A] ends D+727\n@endgantt"
+        styled = style_gantt(code, dated=False, total_days=plan_total_days(code))
+        assert "printscale weekly with week numbering from 1 zoom 0.5" in styled
+        assert "quarterly" not in styled and "monthly" not in styled
 
     def test_ai_zoom_clause_is_replaced(self) -> None:
         code = (
@@ -407,7 +415,28 @@ class TestStyleGanttScale:
         )
         styled = style_gantt(code, dated=False, total_days=plan_total_days(code))
         assert "zoom 0.25" not in styled
-        assert "printscale weekly with week numbering from 1 zoom 0.5" in styled
+        assert "printscale weekly with week numbering from 1 zoom 2" in styled
+
+    def test_very_short_plan_uses_daily(self) -> None:
+        code = (
+            "@startgantt\nProject starts 2027-07-01\n"
+            "[A] starts 2027-07-01 and lasts 3 days\n@endgantt"
+        )
+        styled = style_gantt(code, dated=True, total_days=plan_total_days(code))
+        assert "printscale daily zoom 2" in styled
+
+    def test_month_long_plan_uses_daily(self) -> None:
+        code = (
+            "@startgantt\nProject starts 2027-07-01\n"
+            "[A] starts 2027-07-01 and lasts 15 days\n@endgantt"
+        )
+        styled = style_gantt(code, dated=True, total_days=plan_total_days(code))
+        assert "printscale daily zoom 2" in styled
+
+    def test_no_span_uses_numbered_weekly_axis(self) -> None:
+        code = "@startgantt\n[A] starts at [B]'s end\n@endgantt"
+        styled = style_gantt(code, dated=False, total_days=plan_total_days(code))
+        assert "printscale weekly with week numbering from 1 zoom 2" in styled
 
 
 class TestStyleGanttHides:
@@ -554,11 +583,12 @@ class TestHandEditedCode:
         "@endgantt"
     )
 
-    def test_user_scale_zoom_and_colours_are_kept(self) -> None:
+    def test_user_colours_are_kept_and_scale_is_code_owned(self) -> None:
         styled = style_gantt(
             self._USER_EDIT, dated=True, total_days=None, preserve_user_choices=True
         )
-        assert "printscale quarterly zoom 2" in styled
+        assert "printscale weekly with week numbering from 1 zoom 2" in styled
+        assert "printscale quarterly zoom 2" not in styled
         assert "[M1] is colored in LightGray" in styled
         assert styled.count("is colored in") == 2
         assert "hide column start" in styled
@@ -566,7 +596,7 @@ class TestHandEditedCode:
     def test_missing_scale_is_still_added_for_user_code(self) -> None:
         code = "@startgantt\nProject starts 2027-07-01\n[A] starts 2027-07-01\n[A] ends 2027-09-30\n@endgantt"
         styled = style_gantt(code, dated=True, total_days=92, preserve_user_choices=True)
-        assert "printscale monthly" in styled
+        assert "printscale weekly zoom 2" in styled
 
     def test_alias_and_requires_syntax_passes_plan_check(self) -> None:
         start = date(2027, 7, 1)

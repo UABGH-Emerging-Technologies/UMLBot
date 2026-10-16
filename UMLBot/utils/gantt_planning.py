@@ -24,6 +24,9 @@ Public API:
     style_gantt
     plan_total_days
     wants_detailed_plan
+    gantt_layout_ok
+    bump_gantt_zoom
+    postprocess_gantt_svg
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ import calendar
 import math
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 # The UI wraps the user's request inside a larger description; this marker
 # separates the actual request from the surrounding context.
@@ -119,11 +122,34 @@ _ARROW_RE = re.compile(r"\[([^\]]+)\]\s*-{1,2}>\s*\[([^\]]+)\]")
 _STARTS_AT_END_RE = re.compile(
     r"\[([^\]]+)\]\s+starts\s+at\s+\[([^\]]+)\]\s*'s\s+end", re.IGNORECASE
 )
+_STARTS_AT_START_RE = re.compile(
+    r"\[([^\]]+)\]\s+starts\s+at\s+\[([^\]]+)\]\s*'s\s+start", re.IGNORECASE
+)
 _HAPPENS_AT_END_RE = re.compile(
     r"\[([^\]]+)\]\s+happens\s+at\s+\[([^\]]+)\]\s*'s\s+end", re.IGNORECASE
 )
+# ``[Label] happens ...`` -- the subject is a zero-length milestone.
+_HAPPENS_LINE_RE = re.compile(r"^\s*\[([^\]]+)\]\s+happens\b(.*)$", re.IGNORECASE)
+# ``3 days`` / ``2 weeks`` -- a duration in days or weeks, optionally preceded
+# by ``lasts``/``requires`` (the keyword is absent on a ``lasts`` declaration).
+_BARE_DURATION_RE = re.compile(r"\b(\d+)\s+(days?|weeks?)\b", re.IGNORECASE)
 _BARE_YEAR_RE = re.compile(r"(?<![\w+-])((?:19|20)\d{2})(?![\w-])")
 _PROJECT_STARTS_RE = re.compile(r"^\s*Project\s+starts\b(.*)$", re.IGNORECASE)
+
+# The first ``title ...`` line may carry a model-written scale note such as
+# "(timeline in project weeks; 13 weeks = 1 quarter)"; it is stripped from the
+# chart title.  Parentheticals that are not scale notes (e.g. "(R21)") are kept.
+_TITLE_LINE_RE = re.compile(r"^\s*title\b", re.IGNORECASE)
+_TITLE_SCALE_NOTE_RE = re.compile(r"\s*\([^()]*(?:timeline\s+in|=)[^()]*\)", re.IGNORECASE)
+
+# SVG parsing helpers used by :func:`gantt_layout_ok` and
+# :func:`postprocess_gantt_svg`.  PlantUML emits one attribute per ``name="..."``.
+_SVG_LINE_RE = re.compile(r"<line\b([^>]*?)/?>", re.DOTALL)
+_SVG_RECT_RE = re.compile(r"<rect\b([^>]*?)/?>", re.DOTALL)
+_SVG_TEXT_RE = re.compile(r"<text\b([^>]*?)>(.*?)</text>", re.DOTALL)
+_SVG_ATTR_RE = re.compile(r'([\w:-]+)="([^"]*)"')
+_SVG_TITLE_GROUP_RE = re.compile(r'(<g class="title"[^>]*>)(.*?)(</g>)', re.DOTALL)
+_SVG_TITLE_TEXT_RE = re.compile(r'(<text\b[^>]*>)(.*?)(</text>)', re.DOTALL)
 
 # Presentation directives and palette used by :func:`style_gantt`.  The table
 # columns are hidden and the footbox removed so only the bars and axis remain.
@@ -135,12 +161,17 @@ _HIDE_LINES: tuple[str, ...] = (
     "hide footbox",
 )
 
-# Task names are listed in the left-hand task column, so the copy PlantUML draws
-# on each bar is made invisible.  Milestone labels are not affected.
-_BAR_TEXT_STYLE: tuple[str, ...] = (
+# Task and milestone names are listed in the left-hand task column, so the copy
+# PlantUML draws on each bar and beside each milestone diamond is made
+# invisible; the diamond label would otherwise run past the chart.  Liberation
+# Sans is metric-compatible with Arial, so the server measures text the same way
+# the browser will once the SVG font-family is rewritten to Arial.
+_INJECTED_STYLE: tuple[str, ...] = (
+    "skinparam defaultFontName Arial",
     "<style>",
     "ganttDiagram {",
     "  task { FontColor transparent }",
+    "  milestone { FontColor transparent }",
     "}",
     "</style>",
 )
@@ -342,49 +373,207 @@ def wants_detailed_plan(description: str) -> bool:
 def plan_total_days(code: str) -> int | None:
     """Return the plan span in days, or ``None`` when nothing is parseable.
 
-    The span is ``latest end - earliest start + 1`` measured from the task
-    ``starts``/``ends`` lines: ISO dates in dated charts, ``D+N`` offsets in
-    undated charts.  Malformed input never raises.
+    The span is ``latest end - earliest start + 1`` measured from the task lines.
+    Explicit ``starts``/``ends`` dates and ``D+N`` offsets are read as before;
+    duration (``lasts N days``), dependency (``starts at [Y]'s end``) and milestone
+    (``happens ...``) declarations are resolved to a fixed point so the real span is
+    measured even when no task states both its start and its end.  Malformed input
+    never raises.
     """
     try:
-        starts_iso: list[date] = []
-        ends_iso: list[date] = []
-        starts_offset: list[int] = []
-        ends_offset: list[int] = []
-
-        for line in code.splitlines():
-            starts_match = _STARTS_LINE_RE.match(line)
-            if starts_match:
-                _collect_span_point(starts_match.group(2), starts_iso, starts_offset)
-                continue
-            ends_match = _ENDS_LINE_RE.match(line)
-            if ends_match:
-                _collect_span_point(ends_match.group(2), ends_iso, ends_offset)
-
-        if starts_iso or ends_iso:
-            earliest = min(starts_iso) if starts_iso else min(ends_iso)
-            latest = max(ends_iso) if ends_iso else max(starts_iso)
-            return (latest - earliest).days + 1
-        if starts_offset or ends_offset:
-            earliest_offset = min(starts_offset) if starts_offset else min(ends_offset)
-            latest_offset = max(ends_offset) if ends_offset else max(starts_offset)
-            return latest_offset - earliest_offset + 1
-        return None
+        return _plan_total_days_impl(code)
     except Exception:  # pragma: no cover - defensive; measurement must never raise
         return None
 
 
-def _collect_span_point(rest: str, iso_dates: list[date], offsets: list[int]) -> None:
+def _plan_total_days_impl(code: str) -> int | None:
+    """Resolve every task declaration and measure the resulting span."""
+    lines = code.splitlines()
+    project_start = _project_start_date(lines)
+
+    start_dates: dict[str, date] = {}
+    start_offsets: dict[str, int] = {}
+    end_dates: dict[str, date] = {}
+    end_offsets: dict[str, int] = {}
+    durations: dict[str, int] = {}
+    dep_end: dict[str, str] = {}
+    dep_start: dict[str, str] = {}
+    milestone_end: dict[str, str] = {}
+    milestone_dates: dict[str, date] = {}
+    labels: set[str] = set()
+
+    for line in lines:
+        starts_match = _STARTS_LINE_RE.match(line)
+        if starts_match:
+            label, rest = starts_match.group(1), starts_match.group(2)
+            labels.add(label)
+            at_end = _STARTS_AT_END_RE.search(line)
+            at_start = _STARTS_AT_START_RE.search(line)
+            if at_end is not None:
+                dep_end[label] = at_end.group(2)
+            elif at_start is not None:
+                dep_start[label] = at_start.group(2)
+            else:
+                _collect_span_point(rest, label, start_dates, start_offsets)
+            duration = _BARE_DURATION_RE.search(rest)
+            if duration is not None:
+                durations[label] = _duration_days(duration)
+            continue
+
+        ends_match = _ENDS_LINE_RE.match(line)
+        if ends_match:
+            label, rest = ends_match.group(1), ends_match.group(2)
+            labels.add(label)
+            _collect_span_point(rest, label, end_dates, end_offsets)
+            continue
+
+        lasts_match = _LASTS_LINE_RE.match(line)
+        if lasts_match:
+            label, rest = lasts_match.group(1), lasts_match.group(2)
+            labels.add(label)
+            duration = _BARE_DURATION_RE.search(rest)
+            if duration is not None:
+                durations[label] = _duration_days(duration)
+            continue
+
+        happens_match = _HAPPENS_LINE_RE.match(line)
+        if happens_match:
+            label, rest = happens_match.group(1), happens_match.group(2)
+            labels.add(label)
+            at_end = _HAPPENS_AT_END_RE.search(line)
+            if at_end is not None:
+                milestone_end[label] = at_end.group(2)
+            else:
+                iso = _ISO_DATE_RE.search(rest)
+                if iso is not None:
+                    parsed = _safe_date(iso.group(0))
+                    if parsed is not None:
+                        milestone_dates[label] = parsed
+
+    if not labels:
+        return None
+
+    dated = bool(project_start or start_dates or end_dates or milestone_dates)
+    starts: dict[str, date | int] = {}
+    ends: dict[str, date | int] = {}
+    for label, value in start_dates.items():
+        starts[label] = value
+    for label, value in end_dates.items():
+        ends[label] = value
+    for label, value in start_offsets.items():
+        anchored = _anchor_offset(value, dated, project_start)
+        if anchored is not None:
+            starts[label] = anchored
+    for label, value in end_offsets.items():
+        anchored = _anchor_offset(value, dated, project_start)
+        if anchored is not None:
+            ends[label] = anchored
+
+    for _ in range(len(labels) + 1):
+        changed = False
+        for label in labels:
+            if label in dep_end and label not in starts:
+                prerequisite = dep_end[label]
+                if prerequisite in ends:
+                    starts[label] = _shift(ends[prerequisite], 1, dated)
+                    changed = True
+            if label in dep_start and label not in starts:
+                prerequisite = dep_start[label]
+                if prerequisite in starts:
+                    starts[label] = starts[prerequisite]
+                    changed = True
+            if label in milestone_end and label not in starts:
+                prerequisite = milestone_end[label]
+                if prerequisite in ends:
+                    starts[label] = ends[prerequisite]
+                    ends[label] = ends[prerequisite]
+                    changed = True
+            if label in milestone_dates and label not in starts:
+                starts[label] = milestone_dates[label]
+                ends[label] = milestone_dates[label]
+                changed = True
+            duration = durations.get(label)
+            if duration is not None:
+                if label in starts and label not in ends:
+                    ends[label] = _shift(starts[label], duration - 1, dated)
+                    changed = True
+                elif label in ends and label not in starts:
+                    starts[label] = _shift(ends[label], -(duration - 1), dated)
+                    changed = True
+                elif (
+                    label not in starts
+                    and label not in ends
+                    and label not in dep_end
+                    and label not in dep_start
+                    and label not in milestone_end
+                ):
+                    anchor = project_start if (dated and project_start is not None) else 0
+                    starts[label] = anchor
+                    ends[label] = _shift(anchor, duration - 1, dated)
+                    changed = True
+        if not changed:
+            break
+
+    if not starts and not ends:
+        return None
+    earliest = min(starts.values()) if starts else min(ends.values())
+    latest = max(ends.values()) if ends else max(starts.values())
+    return _span_days(earliest, latest, dated)
+
+
+def _project_start_date(lines: list[str]) -> date | None:
+    """Return the calendar date on the ``Project starts`` line, or ``None``."""
+    for line in lines:
+        match = _PROJECT_STARTS_RE.match(line)
+        if match is not None:
+            iso = _ISO_DATE_RE.search(match.group(1))
+            if iso is not None:
+                return _safe_date(iso.group(0))
+    return None
+
+
+def _collect_span_point(
+    rest: str, label: str, iso_dates: dict[str, date], offsets: dict[str, int]
+) -> None:
     """Record an ISO date or ``D+N`` offset parsed from a task line's tail."""
     iso = _ISO_DATE_RE.search(rest)
     if iso is not None:
         parsed = _safe_date(iso.group(0))
         if parsed is not None:
-            iso_dates.append(parsed)
+            iso_dates[label] = parsed
         return
     offset = _D_OFFSET_RE.search(rest)
     if offset is not None:
-        offsets.append(int(offset.group(1)))
+        offsets[label] = int(offset.group(1))
+
+
+def _duration_days(match: re.Match[str]) -> int:
+    """Return a ``lasts N day(s)|week(s)`` duration in days."""
+    amount = int(match.group(1))
+    return amount * 7 if match.group(2).lower().startswith("week") else amount
+
+
+def _anchor_offset(value: int, dated: bool, project_start: date | None) -> date | int | None:
+    """Convert a ``D+N`` offset to a date when the chart is dated."""
+    if not dated:
+        return value
+    if project_start is None:
+        return None
+    return project_start + timedelta(days=value)
+
+
+def _shift(value: date | int, days: int, dated: bool) -> date | int:
+    """Shift a date or day-offset value by ``days``."""
+    if dated:
+        return value + timedelta(days=days)
+    return value + days
+
+
+def _span_days(earliest: date | int, latest: date | int, dated: bool) -> int:
+    """Return the inclusive span between two dates or day-offsets."""
+    if dated:
+        return (latest - earliest).days + 1
+    return latest - earliest + 1
 
 
 def wants_auto_style(code: str) -> bool:
@@ -399,14 +588,14 @@ def style_gantt(
 
     The transformation shows task names in a left-hand task column (hiding the
     start/end/duration columns, the footbox and the duplicate text on each bar),
-    chooses a sensible axis (monthly/quarterly when dated, a weekly numbered
-    axis when undated) and colours every task by its section.  It is pure and
-    idempotent: applying it twice returns the same code.  Any failure returns
-    ``code`` unchanged.
+    chooses an axis from the measured span and colours every task by its section.
+    The scale and any title scale note are always code-owned, so they are replaced
+    on every path.  It is pure and idempotent: applying it twice returns the same
+    code.  Any failure returns ``code`` unchanged.
 
     With ``preserve_user_choices`` (used for code a person edited by hand and
-    marked with :data:`AUTO_STYLE_MARKER`) an existing ``printscale`` line, its
-    zoom, any colours and any ``<style>`` block are left exactly as written.
+    marked with :data:`AUTO_STYLE_MARKER`) the user's colours and an existing
+    ``<style>`` block are left as written.
     """
     try:
         lines = code.splitlines()
@@ -414,16 +603,29 @@ def style_gantt(
             return code
         lines = _insert_hide_lines(lines)
         if not _has_style_block(lines):
-            lines = _insert_after_hide_lines_block(lines, list(_BAR_TEXT_STYLE))
-        if preserve_user_choices:
-            if not any(_PRINTSCALE_LINE_RE.match(line) for line in lines):
-                lines = _apply_scale(lines, dated=dated, total_days=total_days)
-            return "\n".join(lines)
+            lines = _insert_after_hide_lines_block(lines, list(_INJECTED_STYLE))
+        lines = _strip_title_scale_note(lines)
         lines = _apply_scale(lines, dated=dated, total_days=total_days)
+        if preserve_user_choices:
+            return "\n".join(lines)
         lines = _apply_section_colours(lines)
         return "\n".join(lines)
     except Exception:
         return code
+
+
+def _strip_title_scale_note(lines: list[str]) -> list[str]:
+    """Remove a model-written scale note from the first ``title`` line."""
+    for index, line in enumerate(lines):
+        if _TITLE_LINE_RE.match(line):
+            lines[index] = _strip_scale_note(line)
+            break
+    return lines
+
+
+def _strip_scale_note(text: str) -> str:
+    """Remove parentheticals that state a timeline scale, then rstrip."""
+    return _TITLE_SCALE_NOTE_RE.sub("", text).rstrip()
 
 
 def _has_style_block(lines: list[str]) -> bool:
@@ -464,11 +666,29 @@ def _insert_hide_lines(lines: list[str]) -> list[str]:
 
 def _scale_line(*, dated: bool, total_days: int | None) -> str:
     """Return the axis directive appropriate for the chart's span."""
+    if total_days is None:
+        return "printscale weekly with week numbering from 1 zoom 2"
     if not dated:
+        # Without ``Project starts`` PlantUML cannot draw month or quarter
+        # columns and falls back to one column per day -- 730 sub-pixel columns
+        # for a two-year plan, which renders as a solid grey block.  A numbered
+        # weekly axis works undated, so use it, zoomed out as the plan grows.
+        if total_days <= 31:
+            return "printscale daily zoom 2"
+        if total_days <= 120:
+            return "printscale weekly with week numbering from 1 zoom 2"
+        if total_days <= 400:
+            return "printscale weekly with week numbering from 1 zoom 1"
         return "printscale weekly with week numbering from 1 zoom 0.5"
-    if total_days is not None and total_days <= 400:
-        return "printscale monthly"
-    return "printscale quarterly"
+    # Up to about a month a day column is wide enough to read; a weekly axis
+    # would squeeze a two-week plan into two or three columns.
+    if total_days <= 31:
+        return "printscale daily zoom 2"
+    if total_days <= 120:
+        return "printscale weekly zoom 2"
+    if total_days <= 400:
+        return "printscale monthly zoom 2"
+    return "printscale quarterly zoom 2"
 
 
 def _apply_scale(lines: list[str], *, dated: bool, total_days: int | None) -> list[str]:
@@ -510,10 +730,23 @@ def _insert_after_hide_lines(lines: list[str], new_line: str) -> list[str]:
     return lines + [new_line]
 
 
+def _task_line_label(line: str) -> str | None:
+    """Return the task label declared by a starts/ends/lasts line, or ``None``."""
+    for pattern in (_STARTS_LINE_RE, _ENDS_LINE_RE, _LASTS_LINE_RE):
+        match = pattern.match(line)
+        if match is not None:
+            return match.group(1)
+    return None
+
+
 def _apply_section_colours(lines: list[str]) -> list[str]:
-    """Colour every task bar by the section it first appears in."""
+    """Colour every distinct non-milestone task by the section it appears in."""
     existing_colours = {
         match.group(1) for line in lines if (match := _COLOUR_LINE_RE.match(line)) is not None
+    }
+
+    milestone_labels = {
+        match.group(1) for line in lines if (match := _HAPPENS_LINE_RE.match(line)) is not None
     }
 
     task_section: dict[str, int] = {}
@@ -528,27 +761,17 @@ def _apply_section_colours(lines: list[str]) -> list[str]:
                 section += 1
             seen_separator = True
             continue
-        starts_match = _STARTS_LINE_RE.match(line)
-        if starts_match is not None and starts_match.group(1) not in task_section:
-            task_section[starts_match.group(1)] = section
+        label = _task_line_label(line)
+        if label is not None and label not in task_section:
+            task_section[label] = section
             seen_task = True
-
-    labels_with_ends = {
-        match.group(1) for line in lines if (match := _ENDS_LINE_RE.match(line)) is not None
-    }
 
     result: list[str] = []
     coloured = set(existing_colours)
     for line in lines:
         result.append(line)
-        ends_match = _ENDS_LINE_RE.match(line)
-        starts_match = _STARTS_LINE_RE.match(line)
-        label: str | None = None
-        if ends_match is not None:
-            label = ends_match.group(1)
-        elif starts_match is not None and starts_match.group(1) not in labels_with_ends:
-            label = starts_match.group(1)
-        if label is None or label in coloured:
+        label = _task_line_label(line)
+        if label is None or label in coloured or label in milestone_labels:
             continue
         section_index = task_section.get(label)
         if section_index is None:
@@ -557,6 +780,160 @@ def _apply_section_colours(lines: list[str]) -> list[str]:
         result.append(f"[{label}] is colored in {colour}")
         coloured.add(label)
     return result
+
+
+def _svg_attrs(fragment: str) -> dict[str, str]:
+    """Parse the ``name="value"`` attributes of one SVG element."""
+    return dict(_SVG_ATTR_RE.findall(fragment))
+
+
+def _horizontal_lines(svg: str) -> list[tuple[float, float, float, str]]:
+    """Return ``(x1, x2, y, style)`` for every horizontal ``<line>``."""
+    lines: list[tuple[float, float, float, str]] = []
+    for match in _SVG_LINE_RE.finditer(svg):
+        attrs = _svg_attrs(match.group(1))
+        try:
+            x1 = float(attrs["x1"])
+            y1 = float(attrs["y1"])
+            x2 = float(attrs["x2"])
+            y2 = float(attrs["y2"])
+        except (KeyError, ValueError):
+            continue
+        if y1 == y2:
+            lines.append((x1, x2, y1, attrs.get("style", "")))
+    return lines
+
+
+def _rect_bounds(svg: str) -> list[tuple[float, float]]:
+    """Return ``(x, x + width)`` for every task-bar ``<rect>``."""
+    bounds: list[tuple[float, float]] = []
+    for match in _SVG_RECT_RE.finditer(svg):
+        attrs = _svg_attrs(match.group(1))
+        try:
+            x = float(attrs["x"])
+            width = float(attrs["width"])
+        except (KeyError, ValueError):
+            continue
+        bounds.append((x, x + width))
+    return bounds
+
+
+def _is_separator_label(
+    attrs: dict[str, str], y: float, lines: list[tuple[float, float, float, str]]
+) -> bool:
+    """Return whether a ``<text>`` is a section separator label.
+
+    A separator label is an 11px text whose glyph band ``[y - font-size, y]``
+    contains a horizontal line; task, axis and milestone labels are excluded.
+    """
+    try:
+        font_size = float(attrs["font-size"])
+    except (KeyError, ValueError):
+        return False
+    if font_size != 11:
+        return False
+    return any(line_y >= y - font_size and line_y <= y for _x1, _x2, line_y, _style in lines)
+
+
+# The timeline must be at least this many times as wide as the task column, or a
+# short plan reads as a few narrow columns beside a wide list of names.
+_MIN_TIMELINE_RATIO = 2.0
+
+
+def gantt_layout_ok(svg: str) -> bool:
+    """Return whether a rendered Gantt SVG lays its separator labels out cleanly.
+
+    Measures on the raw SVG (before :func:`postprocess_gantt_svg` strips
+    ``textLength``).  ``T`` is the timeline's left edge -- the smallest ``x1``
+    among horizontal separator lines (or the smallest task-bar ``x`` minus 2 when
+    there are none).  ``R`` is the timeline's right edge -- the largest ``x2``
+    among those lines (or the largest task-bar right edge).  The layout is bad when
+    the timeline is less than :data:`_MIN_TIMELINE_RATIO` times as wide as the
+    task column (``R - T < ratio * T``) or a separator label overruns ``R``.
+    Never raises; returns ``True`` when nothing can be measured.
+    """
+    try:
+        horizontal = _horizontal_lines(svg)
+        separators = [line for line in horizontal if "stroke:#181818" in line[3]]
+        if separators:
+            left = min(line[0] for line in separators)
+            right = max(line[1] for line in separators)
+        else:
+            bounds = _rect_bounds(svg)
+            if not bounds:
+                return True
+            left = min(start for start, _end in bounds) - 2
+            right = max(end for _start, end in bounds)
+        if (right - left) < _MIN_TIMELINE_RATIO * left:
+            return False
+        for match in _SVG_TEXT_RE.finditer(svg):
+            attrs = _svg_attrs(match.group(1))
+            try:
+                x = float(attrs["x"])
+                y = float(attrs["y"])
+                text_length = float(attrs["textLength"])
+            except (KeyError, ValueError):
+                continue
+            if not _is_separator_label(attrs, y, horizontal):
+                continue
+            if x > left and x + text_length + 10 > right:
+                return False
+        return True
+    except Exception:
+        return True
+
+
+def bump_gantt_zoom(code: str) -> str:
+    """Multiply the printscale zoom by 1.5, adding a scale line when missing."""
+    try:
+        lines = code.splitlines()
+        index = next(
+            (i for i, line in enumerate(lines) if _PRINTSCALE_LINE_RE.match(line)), None
+        )
+        if index is None:
+            return "\n".join(_insert_after_hide_lines(lines, "printscale weekly zoom 3"))
+        line = lines[index]
+        zoom = re.search(r"\bzoom\s+([\d.]+)", line, re.IGNORECASE)
+        if zoom is None:
+            lines[index] = line.rstrip() + " zoom 1.5"
+        else:
+            value = float(zoom.group(1)) * 1.5
+            lines[index] = line[: zoom.start(1)] + f"{value:g}" + line[zoom.end(1) :]
+        return "\n".join(lines)
+    except Exception:
+        return code
+
+
+def postprocess_gantt_svg(svg: str) -> str:
+    """Make a PlantUML Gantt SVG measure the same in any browser.
+
+    Removes the server-measured ``textLength``/``lengthAdjust`` attributes so
+    the browser is not forced to stretch its own font, rewrites the font family to
+    the metric-compatible Arial stack, and strips a scale note from the title.
+    Idempotent; returns ``svg`` unchanged on any error.
+    """
+    try:
+        result = re.sub(r'\s+textLength="[^"]*"', "", svg)
+        result = re.sub(r'\s+lengthAdjust="[^"]*"', "", result)
+        result = re.sub(
+            r'font-family="[^"]*"',
+            'font-family="Arial, \'Liberation Sans\', Helvetica, sans-serif"',
+            result,
+        )
+        return _SVG_TITLE_GROUP_RE.sub(_strip_svg_title_group, result)
+    except Exception:
+        return svg
+
+
+def _strip_svg_title_group(match: re.Match[str]) -> str:
+    """Strip the scale note from the text inside a ``<g class="title">`` group."""
+    inner = _SVG_TITLE_TEXT_RE.sub(_strip_svg_title_text, match.group(2))
+    return match.group(1) + inner + match.group(3)
+
+
+def _strip_svg_title_text(match: re.Match[str]) -> str:
+    """Strip the scale note from one SVG title ``<text>`` element."""
+    return match.group(1) + _strip_scale_note(match.group(2)) + match.group(3)
 
 
 def check_gantt_plan(
