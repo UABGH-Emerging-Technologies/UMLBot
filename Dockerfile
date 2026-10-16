@@ -8,6 +8,7 @@ RUN apt-get update \
         git \
         graphviz \
         fonts-dejavu-core \
+        fonts-liberation \
         unixodbc \
         curl \
     && rm -rf /var/lib/apt/lists/*

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from UMLBot.config.config import UMLBotConfig
+from UMLBot.services.diagram_service import _render_gantt
 from UMLBot.utils.gantt_planning import (
     AUTO_STYLE_MARKER,
     plan_total_days,
@@ -139,9 +140,10 @@ def test_each_task_name_rendered_exactly_once(code: str, dated: bool) -> None:
     texts = _render_svg_texts(_styled(code, dated))
     for task in _TASKS:
         assert texts.count(task) == 1, f"{task!r} rendered {texts.count(task)} times"
-    # Milestones are listed in the task column and also labelled beside the diamond.
+    # Milestone names are listed in the task column; the label beside the
+    # diamond is hidden so it cannot overflow past the last timeline column.
     for milestone in _MILESTONES:
-        assert texts.count(milestone) == 2
+        assert texts.count(milestone) == 1
 
 
 @pytest.mark.skipif(not _JAR_AVAILABLE, reason="java or the PlantUML jar is not available")
@@ -159,3 +161,59 @@ def test_unstyled_chart_duplicates_names() -> None:
     unstyled = styled.replace("  task { FontColor transparent }\n", "")
     texts = _render_svg_texts(unstyled)
     assert texts.count("Develop BHCI algorithm") == 2
+
+
+_LINE_TAG_RE = re.compile(r"<line\b([^>]*?)/?>", re.DOTALL)
+_ATTR_RE = re.compile(r'([\w:-]+)="([^"]*)"')
+_TEXT_TAG_RE = re.compile(r"<text\b([^>]*?)>(.*?)</text>", re.DOTALL)
+
+
+def _render_svg_raw(code: str) -> str:
+    """Render ``code`` to SVG with the real PlantUML jar and return the raw text."""
+    proc = subprocess.run(
+        ["java", "-jar", UMLBotConfig.PLANTUML_JAR_PATH, "-tsvg", "-pipe"],
+        input=code.encode("utf-8"),
+        capture_output=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr.decode("utf-8", errors="replace")
+    return proc.stdout.decode("utf-8")
+
+
+@pytest.mark.skipif(not _JAR_AVAILABLE, reason="java or the PlantUML jar is not available")
+def test_no_separator_line_strikes_through_label() -> None:
+    # Only horizontal lines (y1 == y2) inside a label's glyph band [y - font-size, y]
+    # can strike through it; vertical grid lines never count.
+    styled = _styled(_DATED_AI_CODE, True)
+    _rendered, _status, _ok, final_code = _render_gantt(styled, "status", "svg")
+    svg = _render_svg_raw(final_code)
+    horizontal: list[tuple[float, float, float]] = []
+    for match in _LINE_TAG_RE.finditer(svg):
+        attrs = dict(_ATTR_RE.findall(match.group(1)))
+        try:
+            x1 = float(attrs["x1"])
+            y1 = float(attrs["y1"])
+            x2 = float(attrs["x2"])
+            y2 = float(attrs["y2"])
+        except (KeyError, ValueError):
+            continue
+        if y1 == y2:
+            horizontal.append((x1, x2, y1))
+    labels: list[tuple[str, float, float, float, float]] = []
+    for match in _TEXT_TAG_RE.finditer(svg):
+        attrs = dict(_ATTR_RE.findall(match.group(1)))
+        try:
+            x = float(attrs["x"])
+            y = float(attrs["y"])
+            font_size = float(attrs["font-size"])
+            text_length = float(attrs["textLength"])
+        except (KeyError, ValueError):
+            continue
+        if font_size == 11:
+            labels.append((match.group(2), x, y, font_size, text_length))
+    assert labels
+    for content, x, y, font_size, text_length in labels:
+        for x1, x2, line_y in horizontal:
+            if y - font_size <= line_y <= y:
+                low, high = min(x1, x2), max(x1, x2)
+                assert not (low < x + text_length and high > x), f"{content!r} is struck through"

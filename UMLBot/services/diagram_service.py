@@ -26,11 +26,13 @@ from UMLBot.diagram_handlers import (
 )
 from UMLBot.utils.gantt_planning import (
     Quarter,
+    bump_gantt_zoom,
     check_gantt_plan,
+    gantt_layout_ok,
     plan_total_days,
+    postprocess_gantt_svg,
     quarter_table,
     style_gantt,
-    wants_auto_style,
 )
 from UMLBot.utils.plantuml_sanitizer import sanitize_plantuml
 
@@ -258,19 +260,24 @@ class DiagramService:
         the sixth lists Gantt plan-check warnings (empty for other modes).
         """
         sanitized_code = sanitize_plantuml(plantuml_code, mode)
-        # Hand-edited code is rendered as written unless it opts in to styling.
-        if mode == "gantt" and wants_auto_style(sanitized_code):
+        # Gantt scale and title are always code-owned, even for hand edits.
+        if mode == "gantt":
             sanitized_code = style_gantt(
                 sanitized_code,
                 dated=_infer_gantt_plan_from_code(sanitized_code)[0] is not None,
                 total_days=plan_total_days(sanitized_code),
                 preserve_user_choices=True,
             )
-        rendered, status_msg, render_ok = _render_plantuml_jar(
-            plantuml_code=sanitized_code,
-            status_msg="Re-rendered from PlantUML code.",
-            fmt=fmt,
-        )
+            rendered, status_msg, render_ok, final_code = _render_gantt(
+                sanitized_code, "Re-rendered from PlantUML code.", fmt
+            )
+        else:
+            rendered, status_msg, render_ok = _render_plantuml_jar(
+                plantuml_code=sanitized_code,
+                status_msg="Re-rendered from PlantUML code.",
+                fmt=fmt,
+            )
+            final_code = sanitized_code
         if rendered is None:
             if fmt == "svg":
                 rendered = _create_placeholder_svg("Diagram preview unavailable")
@@ -279,12 +286,12 @@ class DiagramService:
             render_ok = False
         problems: list[str] = []
         if mode == "gantt":
-            start, quarters = _infer_gantt_plan_from_code(sanitized_code)
-            problems = check_gantt_plan(sanitized_code, start, quarters, None, check_dates=False)
+            start, quarters = _infer_gantt_plan_from_code(final_code)
+            problems = check_gantt_plan(final_code, start, quarters, None, check_dates=False)
             if problems:
                 warning = "Plan check: " + "; ".join(problems)
                 status_msg = f"{status_msg} | {warning}" if status_msg else warning
-        return rendered, status_msg, "", render_ok, sanitized_code, problems
+        return rendered, status_msg, "", render_ok, final_code, problems
 
     def diagram_image_to_base64(self, image: Image.Image | None) -> Optional[str]:
         """Encode a PIL image to a base64 PNG string."""
@@ -360,10 +367,8 @@ class DiagramService:
                 dated=plan_start is not None,
                 total_days=plan_total_days(current_code),
             )
-        rendered, status_msg, render_ok = _render_plantuml_jar(
-            plantuml_code=current_code,
-            status_msg=base_status,
-            fmt=fmt,
+        rendered, status_msg, render_ok, current_code = _render_code(
+            current_code, base_status, fmt, mode
         )
 
         plan_problems: list[str] = []
@@ -410,10 +415,8 @@ class DiagramService:
                         dated=plan_start is not None,
                         total_days=plan_total_days(current_code),
                     )
-                rendered, status_msg, render_ok = _render_plantuml_jar(
-                    plantuml_code=current_code,
-                    status_msg=base_status,
-                    fmt=fmt,
+                rendered, status_msg, render_ok, current_code = _render_code(
+                    current_code, base_status, fmt, mode
                 )
                 plan_problems = []
                 if mode == "gantt" and render_ok:
@@ -512,6 +515,66 @@ def _render_plantuml_jar(
         else:
             status_msg = failure_msg
         return None, status_msg, False
+
+
+# Maximum number of zoom bumps used to make a Gantt chart's labels fit.
+_GANTT_FIT_RETRIES = 5
+
+
+def _render_code(
+    code: str, status_msg: str, fmt: str, mode: str
+) -> Tuple[Image.Image | str | None, str, bool, str]:
+    """Render ``code``, returning the image plus the code that produced it.
+
+    Gantt charts go through :func:`_render_gantt`; every other mode renders
+    directly and returns ``code`` unchanged.
+    """
+    if mode == "gantt":
+        return _render_gantt(code, status_msg, fmt)
+    rendered, status_msg, render_ok = _render_plantuml_jar(code, status_msg, fmt)
+    return rendered, status_msg, render_ok, code
+
+
+def _render_gantt(
+    code: str, status_msg: str, fmt: str
+) -> Tuple[Image.Image | str | None, str, bool, str]:
+    """Render a Gantt snippet, widening the axis until its labels fit.
+
+    Renders the snippet as SVG, checks :func:`gantt_layout_ok` and, while the
+    layout is bad and fewer than five retries have happened, bumps the zoom and
+    re-renders.  Returns the requested format for the final code, which is the
+    code that produced the returned image.
+    """
+    svg, status_msg, render_ok = _render_plantuml_jar(
+        plantuml_code=code, status_msg=status_msg, fmt="svg"
+    )
+    if not render_ok or not isinstance(svg, str):
+        return _gantt_render_failure(svg, status_msg, render_ok, code, fmt)
+    final_code = code
+    retries = 0
+    while not gantt_layout_ok(svg) and retries < _GANTT_FIT_RETRIES:
+        final_code = bump_gantt_zoom(final_code)
+        svg, status_msg, render_ok = _render_plantuml_jar(
+            plantuml_code=final_code, status_msg=status_msg, fmt="svg"
+        )
+        if not render_ok or not isinstance(svg, str):
+            return _gantt_render_failure(svg, status_msg, render_ok, final_code, fmt)
+        retries += 1
+    if fmt == "svg":
+        return postprocess_gantt_svg(svg), status_msg, True, final_code
+    rendered, status_msg, render_ok = _render_plantuml_jar(
+        plantuml_code=final_code, status_msg=status_msg, fmt="png"
+    )
+    return rendered, status_msg, render_ok, final_code
+
+
+def _gantt_render_failure(
+    svg: Image.Image | str | None, status_msg: str, render_ok: bool, code: str, fmt: str
+) -> Tuple[Image.Image | str | None, str, bool, str]:
+    """Return a failed Gantt render, keeping an already-rendered image when given."""
+    if fmt == "png" and svg is not None and not isinstance(svg, str):
+        return svg, status_msg, render_ok, code
+    return (svg if isinstance(svg, str) else None), status_msg, False, code
 
 
 def _gantt_syntax_hint(start: date | None, quarters: list[Quarter] | None) -> str:
